@@ -22,7 +22,8 @@ type TohServer struct {
 }
 
 type Options struct {
-	Listen string
+	Listen     string
+	ReadBuffer int
 }
 
 func NewTohServer(options Options) *TohServer {
@@ -136,7 +137,7 @@ func (s *TohServer) watchClient(conn *websocket.Conn) {
 
 func (s *TohServer) watchRemoteServer(connId string, conn *websocket.Conn, tcpConn net.Conn) {
 	for {
-		buf := make([]byte, 4096)
+		buf := make([]byte, s.options.ReadBuffer)
 		n, err := tcpConn.Read(buf)
 		if err != nil && err != io.EOF {
 			logrus.Debugf("%s, %v", err)
