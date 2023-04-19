@@ -98,7 +98,7 @@ func (s *TohServer) watchClient(conn *websocket.Conn) {
 			}
 			tcpConn.Close()
 			s.proxyMap.Delete(connId)
-			logrus.Infof("client connection(%s) closed the remote(%s)",
+			logrus.Debugf("client connection(%s) closed the remote(%s)",
 				hex.EncodeToString([]byte(connId)), tcpConn.RemoteAddr().String())
 			return
 		}

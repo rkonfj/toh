@@ -33,6 +33,7 @@ func NewTohClient(options TohClientOptions) (*TohClient, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
+	t1 := time.Now()
 	conn, _, err := websocket.Dial(ctx,
 		fmt.Sprintf("%s?apiKey=%s", options.ServerAddr, options.ApiKey), nil)
 	if err != nil {
@@ -43,33 +44,25 @@ func NewTohClient(options TohClientOptions) (*TohClient, error) {
 		options:  options,
 		proxyMap: &sync.Map{},
 	}
-	logrus.Info("start watching server packets")
+	logrus.Info("toh established successfully, latency ", time.Since(t1))
 	go toh.watchServer()
 	return toh, nil
 }
 
-func (c *TohClient) Dial(ctx context.Context, addr net.Addr) (net.Conn, error) {
+func (c *TohClient) Dial(addr net.Addr) (net.Conn, error) {
 	conn := TcpConn{
-		addr:        addr,
-		toh:         c,
-		buf:         bytes.Buffer{},
-		id:          string(spec.Uint32ToBytes(uuid.New().ID())),
-		segmentChan: make(chan []byte, 1024),
-		sig:         make(chan struct{}, 1024),
+		addr: addr,
+		toh:  c,
+		buf:  bytes.Buffer{},
+		id:   string(spec.Uint32ToBytes(uuid.New().ID())),
+		sig:  make(chan struct{}, 1024),
 	}
 
 	c.proxyMap.Store(conn.id, &conn)
-
-	go func() {
-		for {
-			conn.buf.Write(<-conn.segmentChan)
-			conn.sig <- struct{}{}
-		}
-	}()
 	return &conn, nil
 }
 
-func (c *TohClient) sendPacketSegment(connId string, addr net.Addr, b []byte) error {
+func (c *TohClient) sendPacketSegment(ctx context.Context, connId string, addr net.Addr, b []byte) error {
 	var network, addrType byte
 	if addr.Network() == "tcp" {
 		network = 0x00
@@ -90,7 +83,7 @@ func (c *TohClient) sendPacketSegment(connId string, addr net.Addr, b []byte) er
 	body.Write(spec.Uint16ToBytes(uint16(addr.(*net.TCPAddr).Port)))
 	body.Write(b)
 	b1 := body.Bytes()
-	return c.ws.Write(context.Background(), websocket.MessageBinary, b1)
+	return c.ws.Write(ctx, websocket.MessageBinary, b1)
 }
 
 func (c *TohClient) closeConn(connId string) error {
@@ -132,30 +125,46 @@ func (c *TohClient) watchServer() {
 			continue
 		}
 
-		conn.segmentChan <- b[5:]
+		conn.buf.Write(b[5:])
+		conn.sig <- struct{}{}
 	}
 }
 
 type TcpConn struct {
-	toh         *TohClient
-	segmentChan chan []byte
-	sig         chan struct{}
-	addr        net.Addr
-	buf         bytes.Buffer
-	id          string
-	closed      bool
+	toh           *TohClient
+	sig           chan struct{}
+	addr          net.Addr
+	buf           bytes.Buffer
+	id            string
+	closed        bool
+	deadline      *time.Time
+	readDeadline  *time.Time
+	writeDeadline *time.Time
 }
 
 // Read reads data from the connection.
 // Read can be made to time out and return an error after a fixed
 // time limit; see SetDeadline and SetReadDeadline.
 func (c *TcpConn) Read(b []byte) (n int, err error) {
+	ctx := context.Background()
+	if c.readDeadline != nil {
+		_ctx, cancel := context.WithDeadline(context.Background(), *c.readDeadline)
+		ctx = _ctx
+		defer cancel()
+	} else if c.deadline != nil {
+		_ctx, cancel := context.WithDeadline(context.Background(), *c.deadline)
+		ctx = _ctx
+		defer cancel()
+	}
 	n, err = c.buf.Read(b)
 	if err == io.EOF {
 		if c.closed {
 			return
 		}
-		<-c.sig
+		select {
+		case <-c.sig:
+		case <-ctx.Done():
+		}
 		return c.Read(b)
 	}
 	return
@@ -165,7 +174,17 @@ func (c *TcpConn) Read(b []byte) (n int, err error) {
 // Write can be made to time out and return an error after a fixed
 // time limit; see SetDeadline and SetWriteDeadline.
 func (c *TcpConn) Write(b []byte) (n int, err error) {
-	err = c.toh.sendPacketSegment(c.id, c.addr, b)
+	ctx := context.Background()
+	if c.writeDeadline != nil {
+		_ctx, cancel := context.WithDeadline(context.Background(), *c.writeDeadline)
+		ctx = _ctx
+		defer cancel()
+	} else if c.deadline != nil {
+		_ctx, cancel := context.WithDeadline(context.Background(), *c.deadline)
+		ctx = _ctx
+		defer cancel()
+	}
+	err = c.toh.sendPacketSegment(ctx, c.id, c.addr, b)
 	if err != nil {
 		return
 	}
@@ -175,7 +194,7 @@ func (c *TcpConn) Write(b []byte) (n int, err error) {
 // Close closes the connection.
 // Any blocked Read or Write operations will be unblocked and return errors.
 func (c *TcpConn) Close() error {
-	close(c.segmentChan)
+	close(c.sig)
 	c.toh.closeConn(c.id)
 	return nil
 }
@@ -212,6 +231,7 @@ func (c *TcpConn) RemoteAddr() net.Addr {
 //
 // A zero value for t means I/O operations will not time out.
 func (c *TcpConn) SetDeadline(t time.Time) error {
+	c.deadline = &t
 	return nil
 }
 
@@ -219,6 +239,7 @@ func (c *TcpConn) SetDeadline(t time.Time) error {
 // and any currently-blocked Read call.
 // A zero value for t means Read will not time out.
 func (c *TcpConn) SetReadDeadline(t time.Time) error {
+	c.readDeadline = &t
 	return nil
 }
 
@@ -228,5 +249,6 @@ func (c *TcpConn) SetReadDeadline(t time.Time) error {
 // some of the data was successfully written.
 // A zero value for t means Write will not time out.
 func (c *TcpConn) SetWriteDeadline(t time.Time) error {
+	c.writeDeadline = &t
 	return nil
 }
