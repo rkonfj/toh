@@ -5,7 +5,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"sync"
 
 	"github.com/rkonfj/toh/spec"
 	"github.com/sirupsen/logrus"
@@ -13,9 +12,8 @@ import (
 )
 
 type TohServer struct {
-	proxyMap sync.Map
-	options  Options
-	acl      *ACL
+	options Options
+	acl     *ACL
 }
 
 type Options struct {
@@ -29,9 +27,8 @@ func NewTohServer(options Options) (*TohServer, error) {
 		return nil, err
 	}
 	return &TohServer{
-		proxyMap: sync.Map{},
-		options:  options,
-		acl:      acl,
+		options: options,
+		acl:     acl,
 	}, nil
 }
 
@@ -39,7 +36,7 @@ func (s *TohServer) Run() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{})
 		if err != nil {
-			logrus.Errorf("websocket connected error: %v\n", err)
+			logrus.Errorf("%v", err)
 			return
 		}
 		apiKey := r.Header.Get("x-toh-key")
