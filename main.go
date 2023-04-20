@@ -17,7 +17,6 @@ func main() {
 	cmd.Flags().String("log-level", "info", "logrus logger level")
 	cmd.Flags().String("acl", "acl.json", "file path for authentication")
 	cmd.Flags().StringP("listen", "l", "0.0.0.0:9986", "http server listen address (ip:port)")
-	cmd.Flags().IntP("read-buffer", "r", 4096, "remote conn read buffer size")
 
 	cmd.Execute()
 }
@@ -51,10 +50,6 @@ func startAction(cmd *cobra.Command, args []string) error {
 
 func processServerOptions(cmd *cobra.Command) (options server.Options, err error) {
 	options.Listen, err = cmd.Flags().GetString("listen")
-	if err != nil {
-		return
-	}
-	options.ReadBuffer, err = cmd.Flags().GetInt("read-buffer")
 	if err != nil {
 		return
 	}

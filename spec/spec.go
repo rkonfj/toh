@@ -172,11 +172,9 @@ func (ws *WSReadWrite) Read(b []byte) (n int, err error) {
 			ws.buf = nil
 			return len(ws.buf), nil
 		}
-		if len(ws.buf) > len(b) {
-			copy(b, ws.buf[:len(b)])
-			ws.buf = ws.buf[len(b):]
-			return len(b), nil
-		}
+		copy(b, ws.buf[:len(b)])
+		ws.buf = ws.buf[len(b):]
+		return len(b), nil
 	}
 
 	_, wsb, err := ws.ws.Read(context.Background())

@@ -19,9 +19,8 @@ type TohServer struct {
 }
 
 type Options struct {
-	Listen     string
-	ReadBuffer int
-	ACL        string
+	Listen string
+	ACL    string
 }
 
 func NewTohServer(options Options) (*TohServer, error) {
