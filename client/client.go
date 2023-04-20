@@ -2,9 +2,10 @@ package client
 
 import (
 	"context"
+	"math/rand"
 	"net"
 	"net/http"
-	"net/netip"
+	"strconv"
 	"time"
 
 	"github.com/rkonfj/toh/spec"
@@ -36,13 +37,26 @@ func (c *TohClient) DialTCP(ctx context.Context, addr string) (net.Conn, error) 
 }
 
 func (c *TohClient) dial(ctx context.Context, network, addr string) (conn *websocket.Conn, remoteIP net.IP, remotePort int, err error) {
-	ipAddr, err := netip.ParseAddrPort(addr)
+	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		return
 	}
-	ip := ipAddr.Addr().As4()
-	remoteIP = ip[:]
-	remotePort = int(ipAddr.Port())
+
+	dnsLookupCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	ips, err := net.DefaultResolver.LookupIP(dnsLookupCtx, "ip", host)
+	if err != nil {
+		return
+	}
+
+	_port, err := strconv.ParseInt(port, 10, 32)
+	if err != nil {
+		return
+	}
+
+	remoteIP = ips[rand.Intn(len(ips))]
+	remotePort = int(_port)
 
 	handshake := http.Header{}
 	handshake.Add("x-toh-key", c.options.ApiKey)
