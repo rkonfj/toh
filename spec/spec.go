@@ -90,6 +90,7 @@ func (c *WSTCPConn) Write(b []byte) (n int, err error) {
 		ctx = _ctx
 		defer cancel()
 	}
+	n = len(b)
 	err = c.wsConn.Write(ctx, websocket.MessageBinary, b)
 	return
 }
