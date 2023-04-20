@@ -56,7 +56,9 @@ func (s *TohServer) Run() {
 			dialer := net.Dialer{}
 			tcpConn, err := dialer.DialContext(context.Background(), "tcp", addr)
 			if err != nil {
-				panic(err)
+				conn.Close(websocket.StatusBadGateway, "remote error")
+				logrus.Infof("%s -> %s://%s dial error %v", spec.RealIP(r), network, addr, err)
+				return
 			}
 			go s.pipeTCP(conn, tcpConn)
 			return
