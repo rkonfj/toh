@@ -71,5 +71,4 @@ Flags:
   -h, --help               help for toh
   -l, --listen string      http server listen address (ip:port) (default "0.0.0.0:9986")
       --log-level string   logrus logger level (default "info")
-  -r, --read-buffer int    remote conn read buffer size (default 4096)
 ```
