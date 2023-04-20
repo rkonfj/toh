@@ -2,35 +2,74 @@
 
 `toh` is tcp over http. 
 
-for example:
+### Client
 ```
-c, err := client.NewTohClient(client.TohClientOptions{
-    ServerAddr: "ws://192.168.3.98:9986",
-    ApiKey:     "74c1e17f-4352-4fe3-8c27-f024bf8bcde8",
-})
-if err != nil {
-    panic(err)
+package main
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"io"
+	"time"
+
+	"github.com/rkonfj/toh/client"
+)
+
+func main() {
+	c, err := client.NewTohClient(client.Options{
+		ServerAddr: "ws://172.25.53.251:9986",
+		ApiKey:     "aafc1828-09f4-4c1a-9607-f096d27caae9",
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	conn, err := c.DialTCP(ctx, "172.18.20.6:80")
+	if err != nil {
+		panic(err)
+	}
+	defer conn.Close()
+
+	conn.Write([]byte("GET / HTTP/1.1\r\nHost: 172.18.20.6\r\nConnection: close\r\n\r\n"))
+
+	response := bytes.Buffer{}
+	buf := make([]byte, 512)
+	for {
+		n, err := conn.Read(buf)
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			panic(err)
+		}
+		response.Write(buf[:n])
+	}
+	fmt.Println(response.String())
 }
+```
 
-addr := netip.MustParseAddrPort("192.168.3.79:80")
-ip := addr.Addr().As4()
+### Server
+- Build
+```sh
+git clone https://github.com/rkonfj/toh.git
+go build -ldflags "-s -w"
+```
 
-conn, err := c.Dial(context.Background(), &net.TCPAddr{IP: ip[:], Port: int(addr.Port())})
-if err != nil {
-    panic(err)
-}
-defer conn.Close()
+- Usage
+```
+./toh --help
+A tcp over http/ws server daemon
 
-conn.Write([]byte("GET / HTTP/1.1\r\nHost: 192.168.3.79\r\nConnection: close\r\n\r\n"))
+Usage:
+  toh [flags]
 
-response := bytes.Buffer{}
-buf := make([]byte, 1024)
-for {
-    n, err := conn.Read(buf)
-    if err == io.EOF {
-        break
-    }
-    response.Write(buf[:n])
-}
-fmt.Println("resp:", response.String())
+Flags:
+      --acl string         file path for authentication (default "acl.json")
+  -h, --help               help for toh
+  -l, --listen string      http server listen address (ip:port) (default "0.0.0.0:9986")
+      --log-level string   logrus logger level (default "info")
+  -r, --read-buffer int    remote conn read buffer size (default 4096)
 ```

@@ -9,12 +9,13 @@ import (
 func main() {
 	cmd := &cobra.Command{
 		Use:     "toh",
-		Short:   "A tcp over http(ws) server daemon",
+		Short:   "A tcp over http/ws server daemon",
 		Args:    cobra.NoArgs,
 		PreRunE: initAction,
 		RunE:    startAction,
 	}
 	cmd.Flags().String("log-level", "info", "logrus logger level")
+	cmd.Flags().String("acl", "acl.json", "file path for authentication")
 	cmd.Flags().StringP("listen", "l", "0.0.0.0:9986", "http server listen address (ip:port)")
 	cmd.Flags().IntP("read-buffer", "r", 4096, "remote conn read buffer size")
 
@@ -40,7 +41,11 @@ func startAction(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	server.NewTohServer(options).Run()
+	s, err := server.NewTohServer(options)
+	if err != nil {
+		return err
+	}
+	s.Run()
 	return nil
 }
 
@@ -50,5 +55,9 @@ func processServerOptions(cmd *cobra.Command) (options server.Options, err error
 		return
 	}
 	options.ReadBuffer, err = cmd.Flags().GetInt("read-buffer")
+	if err != nil {
+		return
+	}
+	options.ACL, err = cmd.Flags().GetString("acl")
 	return
 }
