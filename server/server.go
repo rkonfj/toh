@@ -64,7 +64,7 @@ func (s *TohServer) Run() {
 		logrus.Error("unsupported network: ", network)
 	})
 
-	logrus.Infof("server listen %s now\n", s.options.Listen)
+	logrus.Infof("server listen %s now", s.options.Listen)
 	err := http.ListenAndServe(s.options.Listen, nil)
 	if err != nil {
 		logrus.Error(err)

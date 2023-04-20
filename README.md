@@ -4,50 +4,44 @@
 
 ### Client
 ```
-package main
-
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
-	"time"
+	"net"
+	"net/http"
 
 	"github.com/rkonfj/toh/client"
 )
 
 func main() {
 	c, err := client.NewTohClient(client.Options{
-		ServerAddr: "ws://172.25.53.251:9986",
-		ApiKey:     "aafc1828-09f4-4c1a-9607-f096d27caae9",
+		ServerAddr: "wss://l4us.synf.in/ws",
+		ApiKey:     "5868a941-3025-4c6d-ad3a-41e29bb42e5f",
 	})
 	if err != nil {
 		panic(err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	httpClient := &http.Client{
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				return c.DialTCP(ctx, addr)
+			},
+		},
+	}
 
-	conn, err := c.DialTCP(ctx, "172.18.20.6:80")
+	resp, err := httpClient.Get("https://www.google.com")
 	if err != nil {
 		panic(err)
 	}
-	defer conn.Close()
 
-	conn.Write([]byte("GET / HTTP/1.1\r\nHost: 172.18.20.6\r\nConnection: close\r\n\r\n"))
-
-	response := bytes.Buffer{}
-	buf := make([]byte, 512)
-	for {
-		n, err := conn.Read(buf)
-		if err == io.EOF {
-			break
-		} else if err != nil {
-			panic(err)
-		}
-		response.Write(buf[:n])
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		panic(err)
 	}
-	fmt.Println(response.String())
+
+	fmt.Println(string(b))
 }
 ```
 
@@ -59,8 +53,10 @@ go build -ldflags "-s -w"
 ```
 
 - Usage
+
+**As nginx backend**
 ```
-./toh --help
+# ./toh --help
 A tcp over http/ws server daemon
 
 Usage:
@@ -71,4 +67,27 @@ Flags:
   -h, --help               help for toh
   -l, --listen string      http server listen address (ip:port) (default "0.0.0.0:9986")
       --log-level string   logrus logger level (default "info")
+# ./toh 
+time="2023-04-20T02:39:45-04:00" level=info msg="acl: load 1 keys"
+time="2023-04-20T02:39:45-04:00" level=info msg="server listen 0.0.0.0:9986 now"
+```
+**Nginx**
+```
+server {
+	listen 443 ssl;
+	server_name l4us.fnla.io;
+
+	ssl_certificate     tls.crt;
+	ssl_certificate_key tls.key;
+
+	location /ws {
+		proxy_pass http://127.0.0.1:9986;
+		proxy_set_header Host $host;
+		proxy_set_header X-Real-IP $remote_addr;
+		proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+		proxy_http_version 1.1;
+		proxy_set_header Upgrade $http_upgrade;
+		proxy_set_header Connection upgrade;
+	}
+}
 ```
