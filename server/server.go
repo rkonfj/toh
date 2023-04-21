@@ -49,18 +49,14 @@ func (s *TohServer) Run() {
 			return
 		}
 
-		if network == "tcp" {
-			dialer := net.Dialer{}
-			tcpConn, err := dialer.DialContext(context.Background(), "tcp", addr)
-			if err != nil {
-				conn.Close(websocket.StatusBadGateway, "remote error")
-				logrus.Infof("%s -> %s://%s dial error %v", spec.RealIP(r), network, addr, err)
-				return
-			}
-			go s.pipeTCP(conn, tcpConn)
+		dialer := net.Dialer{}
+		netConn, err := dialer.DialContext(context.Background(), network, addr)
+		if err != nil {
+			conn.Close(websocket.StatusBadGateway, "remote error")
+			logrus.Infof("%s -> %s://%s dial error %v", spec.RealIP(r), network, addr, err)
 			return
 		}
-		logrus.Error("unsupported network: ", network)
+		go s.pipe(conn, netConn)
 	})
 
 	logrus.Infof("server listen %s now", s.options.Listen)
@@ -70,11 +66,11 @@ func (s *TohServer) Run() {
 	}
 }
 
-func (s *TohServer) pipeTCP(wsConn *websocket.Conn, tcpConn net.Conn) {
+func (s *TohServer) pipe(wsConn *websocket.Conn, netConn net.Conn) {
 	go func() {
-		io.Copy(tcpConn, spec.RWWS(wsConn))
-		tcpConn.Close()
+		io.Copy(netConn, spec.RWWS(wsConn))
+		netConn.Close()
 	}()
-	io.Copy(spec.RWWS(wsConn), tcpConn)
+	io.Copy(spec.RWWS(wsConn), netConn)
 	wsConn.Close(websocket.StatusBadGateway, "remote close")
 }

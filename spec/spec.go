@@ -10,20 +10,20 @@ import (
 	"nhooyr.io/websocket"
 )
 
-// Tohc the toh client
+// TohClient the toh client
 type TohClient interface {
 	DialTCP(ctx context.Context, address string) (net.Conn, error)
-	DialUDP(ctx context.Context, address string) (net.PacketConn, error)
+	DialUDP(ctx context.Context, address string) (net.Conn, error)
 }
 
-func NewWSTCPConn(wsConn *websocket.Conn, addr net.Addr) *WSTCPConn {
-	return &WSTCPConn{
+func NewWSStreamConn(wsConn *websocket.Conn, addr net.Addr) *WSStreamConn {
+	return &WSStreamConn{
 		wsConn: wsConn,
 		addr:   addr,
 	}
 }
 
-type WSTCPConn struct {
+type WSStreamConn struct {
 	wsConn        *websocket.Conn
 	addr          net.Addr
 	deadline      *time.Time
@@ -35,7 +35,7 @@ type WSTCPConn struct {
 // Read reads data from the connection.
 // Read can be made to time out and return an error after a fixed
 // time limit; see SetDeadline and SetReadDeadline.
-func (c *WSTCPConn) Read(b []byte) (n int, err error) {
+func (c *WSStreamConn) Read(b []byte) (n int, err error) {
 	ctx := context.Background()
 	if c.readDeadline != nil {
 		_ctx, cancel := context.WithDeadline(context.Background(), *c.readDeadline)
@@ -79,7 +79,7 @@ func (c *WSTCPConn) Read(b []byte) (n int, err error) {
 // Write writes data to the connection.
 // Write can be made to time out and return an error after a fixed
 // time limit; see SetDeadline and SetWriteDeadline.
-func (c *WSTCPConn) Write(b []byte) (n int, err error) {
+func (c *WSStreamConn) Write(b []byte) (n int, err error) {
 	ctx := context.Background()
 	if c.writeDeadline != nil {
 		_ctx, cancel := context.WithDeadline(context.Background(), *c.writeDeadline)
@@ -97,17 +97,17 @@ func (c *WSTCPConn) Write(b []byte) (n int, err error) {
 
 // Close closes the connection.
 // Any blocked Read or Write operations will be unblocked and return errors.
-func (c *WSTCPConn) Close() error {
+func (c *WSStreamConn) Close() error {
 	return c.wsConn.Close(websocket.StatusNormalClosure, "have read")
 }
 
 // LocalAddr returns the local network address, if known.
-func (c *WSTCPConn) LocalAddr() net.Addr {
+func (c *WSStreamConn) LocalAddr() net.Addr {
 	return nil
 }
 
 // RemoteAddr returns the remote network address, if known.
-func (c *WSTCPConn) RemoteAddr() net.Addr {
+func (c *WSStreamConn) RemoteAddr() net.Addr {
 	return c.addr
 }
 
@@ -132,7 +132,7 @@ func (c *WSTCPConn) RemoteAddr() net.Addr {
 // the deadline after successful Read or Write calls.
 //
 // A zero value for t means I/O operations will not time out.
-func (c *WSTCPConn) SetDeadline(t time.Time) error {
+func (c *WSStreamConn) SetDeadline(t time.Time) error {
 	c.deadline = &t
 	return nil
 }
@@ -140,7 +140,7 @@ func (c *WSTCPConn) SetDeadline(t time.Time) error {
 // SetReadDeadline sets the deadline for future Read calls
 // and any currently-blocked Read call.
 // A zero value for t means Read will not time out.
-func (c *WSTCPConn) SetReadDeadline(t time.Time) error {
+func (c *WSStreamConn) SetReadDeadline(t time.Time) error {
 	c.readDeadline = &t
 	return nil
 }
@@ -150,7 +150,7 @@ func (c *WSTCPConn) SetReadDeadline(t time.Time) error {
 // Even if write times out, it may return n > 0, indicating that
 // some of the data was successfully written.
 // A zero value for t means Write will not time out.
-func (c *WSTCPConn) SetWriteDeadline(t time.Time) error {
+func (c *WSStreamConn) SetWriteDeadline(t time.Time) error {
 	c.writeDeadline = &t
 	return nil
 }

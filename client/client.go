@@ -33,7 +33,15 @@ func (c *TohClient) DialTCP(ctx context.Context, addr string) (net.Conn, error) 
 	if err != nil {
 		return nil, err
 	}
-	return spec.NewWSTCPConn(conn, &net.TCPAddr{IP: ip, Port: port}), nil
+	return spec.NewWSStreamConn(conn, &net.TCPAddr{IP: ip, Port: port}), nil
+}
+
+func (c *TohClient) DialUDP(ctx context.Context, addr string) (net.Conn, error) {
+	conn, ip, port, err := c.dial(ctx, "udp", addr)
+	if err != nil {
+		return nil, err
+	}
+	return spec.NewWSStreamConn(conn, &net.UDPAddr{IP: ip, Port: port}), nil
 }
 
 func (c *TohClient) dial(ctx context.Context, network, addr string) (conn *websocket.Conn, remoteIP net.IP, remotePort int, err error) {
