@@ -18,6 +18,7 @@ type TohClient interface {
 type WSConn interface {
 	Read(ctx context.Context) ([]byte, error)
 	Write(ctx context.Context, p []byte) error
+	LocalAddr() net.Addr
 	Close(code int, reason string) error
 }
 
@@ -42,17 +43,6 @@ func NewWSStreamConn(wsConn WSConn, addr net.Addr) *WSStreamConn {
 // Read can be made to time out and return an error after a fixed
 // time limit; see SetDeadline and SetReadDeadline.
 func (c *WSStreamConn) Read(b []byte) (n int, err error) {
-	ctx := context.Background()
-	if c.readDeadline != nil {
-		_ctx, cancel := context.WithDeadline(context.Background(), *c.readDeadline)
-		ctx = _ctx
-		defer cancel()
-	} else if c.deadline != nil {
-		_ctx, cancel := context.WithDeadline(context.Background(), *c.deadline)
-		ctx = _ctx
-		defer cancel()
-	}
-
 	if len(c.buf) > 0 {
 		if len(c.buf) <= len(b) {
 			n := copy(b, c.buf)
@@ -62,6 +52,17 @@ func (c *WSStreamConn) Read(b []byte) (n int, err error) {
 		copy(b, c.buf[:len(b)])
 		c.buf = c.buf[len(b):]
 		return len(b), nil
+	}
+
+	ctx := context.Background()
+	if c.readDeadline != nil {
+		_ctx, cancel := context.WithDeadline(context.Background(), *c.readDeadline)
+		ctx = _ctx
+		defer cancel()
+	} else if c.deadline != nil {
+		_ctx, cancel := context.WithDeadline(context.Background(), *c.deadline)
+		ctx = _ctx
+		defer cancel()
 	}
 
 	wsb, err := c.wsConn.Read(ctx)
@@ -110,7 +111,7 @@ func (c *WSStreamConn) Close() error {
 
 // LocalAddr returns the local network address, if known.
 func (c *WSStreamConn) LocalAddr() net.Addr {
-	return nil
+	return c.wsConn.LocalAddr()
 }
 
 // RemoteAddr returns the remote network address, if known.

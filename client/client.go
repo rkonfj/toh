@@ -92,6 +92,10 @@ func (c *NhooyrWSConn) Write(ctx context.Context, p []byte) error {
 	return c.Conn.Write(ctx, websocket.MessageBinary, p)
 }
 
+func (c *NhooyrWSConn) LocalAddr() net.Addr {
+	return nil
+}
+
 func (c *NhooyrWSConn) Close(code int, reason string) error {
 	return c.Conn.Close(websocket.StatusCode(code), reason)
 }
