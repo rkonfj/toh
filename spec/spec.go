@@ -66,7 +66,8 @@ func (c *WSStreamConn) Read(b []byte) (n int, err error) {
 
 	wsb, err := c.wsConn.Read(ctx)
 	if err != nil {
-		if strings.Contains(err.Error(), "StatusBadGateway") {
+		if strings.Contains(err.Error(), "StatusBadGateway") ||
+			strings.Contains(err.Error(), "1014") {
 			return 0, io.EOF
 		}
 		return 0, err
