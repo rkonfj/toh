@@ -33,7 +33,7 @@ func (c *TohClient) DialTCP(ctx context.Context, addr string) (net.Conn, error) 
 	if err != nil {
 		return nil, err
 	}
-	return spec.NewWSStreamConn(conn, &net.TCPAddr{IP: ip, Port: port}), nil
+	return spec.NewWSStreamConn(&NhooyrWSConn{conn}, &net.TCPAddr{IP: ip, Port: port}), nil
 }
 
 func (c *TohClient) DialUDP(ctx context.Context, addr string) (net.Conn, error) {
@@ -41,7 +41,7 @@ func (c *TohClient) DialUDP(ctx context.Context, addr string) (net.Conn, error) 
 	if err != nil {
 		return nil, err
 	}
-	return spec.NewWSStreamConn(conn, &net.UDPAddr{IP: ip, Port: port}), nil
+	return spec.NewWSStreamConn(&NhooyrWSConn{conn}, &net.UDPAddr{IP: ip, Port: port}), nil
 }
 
 func (c *TohClient) dial(ctx context.Context, network, addr string) (conn *websocket.Conn, remoteIP net.IP, remotePort int, err error) {
@@ -78,4 +78,20 @@ func (c *TohClient) dial(ctx context.Context, network, addr string) (conn *webso
 	}
 	logrus.Infof("%s://%s established successfully, toh latency %s", network, addr, time.Since(t1))
 	return
+}
+
+type NhooyrWSConn struct {
+	*websocket.Conn
+}
+
+func (c *NhooyrWSConn) Read(ctx context.Context) (b []byte, err error) {
+	_, b, err = c.Conn.Read(ctx)
+	return
+}
+func (c *NhooyrWSConn) Write(ctx context.Context, p []byte) error {
+	return c.Conn.Write(ctx, websocket.MessageBinary, p)
+}
+
+func (c *NhooyrWSConn) Close(code int, reason string) error {
+	return c.Conn.Close(websocket.StatusCode(code), reason)
 }

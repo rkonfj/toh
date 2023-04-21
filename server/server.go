@@ -68,9 +68,9 @@ func (s *TohServer) Run() {
 
 func (s *TohServer) pipe(wsConn *websocket.Conn, netConn net.Conn) {
 	go func() {
-		io.Copy(netConn, spec.RWWS(wsConn))
+		io.Copy(netConn, RWWS(wsConn))
 		netConn.Close()
 	}()
-	io.Copy(spec.RWWS(wsConn), netConn)
+	io.Copy(RWWS(wsConn), netConn)
 	wsConn.Close(websocket.StatusBadGateway, "remote close")
 }

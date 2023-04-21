@@ -6,8 +6,6 @@ import (
 	"net"
 	"strings"
 	"time"
-
-	"nhooyr.io/websocket"
 )
 
 // TohClient the toh client
@@ -16,20 +14,28 @@ type TohClient interface {
 	DialUDP(ctx context.Context, address string) (net.Conn, error)
 }
 
-func NewWSStreamConn(wsConn *websocket.Conn, addr net.Addr) *WSStreamConn {
-	return &WSStreamConn{
-		wsConn: wsConn,
-		addr:   addr,
-	}
+// WSConn websocket connection which used to read, write and close data
+type WSConn interface {
+	Read(ctx context.Context) ([]byte, error)
+	Write(ctx context.Context, p []byte) error
+	Close(code int, reason string) error
 }
 
+// WSStreamConn tcp/udp connection based on websocket connection
 type WSStreamConn struct {
-	wsConn        *websocket.Conn
+	wsConn        WSConn
 	addr          net.Addr
 	deadline      *time.Time
 	readDeadline  *time.Time
 	writeDeadline *time.Time
 	buf           []byte
+}
+
+func NewWSStreamConn(wsConn WSConn, addr net.Addr) *WSStreamConn {
+	return &WSStreamConn{
+		wsConn: wsConn,
+		addr:   addr,
+	}
 }
 
 // Read reads data from the connection.
@@ -58,7 +64,7 @@ func (c *WSStreamConn) Read(b []byte) (n int, err error) {
 		return len(b), nil
 	}
 
-	_, wsb, err := c.wsConn.Read(ctx)
+	wsb, err := c.wsConn.Read(ctx)
 	if err != nil {
 		if strings.Contains(err.Error(), "StatusBadGateway") {
 			return 0, io.EOF
@@ -91,14 +97,14 @@ func (c *WSStreamConn) Write(b []byte) (n int, err error) {
 		defer cancel()
 	}
 	n = len(b)
-	err = c.wsConn.Write(ctx, websocket.MessageBinary, b)
+	err = c.wsConn.Write(ctx, b)
 	return
 }
 
 // Close closes the connection.
 // Any blocked Read or Write operations will be unblocked and return errors.
 func (c *WSStreamConn) Close() error {
-	return c.wsConn.Close(websocket.StatusNormalClosure, "have read")
+	return c.wsConn.Close(1000, "have read")
 }
 
 // LocalAddr returns the local network address, if known.
@@ -153,47 +159,4 @@ func (c *WSStreamConn) SetReadDeadline(t time.Time) error {
 func (c *WSStreamConn) SetWriteDeadline(t time.Time) error {
 	c.writeDeadline = &t
 	return nil
-}
-
-type WSReadWrite struct {
-	ws  *websocket.Conn
-	buf []byte
-}
-
-func RWWS(conn *websocket.Conn) *WSReadWrite {
-	return &WSReadWrite{
-		ws: conn,
-	}
-}
-
-func (ws *WSReadWrite) Read(b []byte) (n int, err error) {
-	if len(ws.buf) > 0 {
-		if len(ws.buf) <= len(b) {
-			copy(b, ws.buf)
-			ws.buf = nil
-			return len(ws.buf), nil
-		}
-		copy(b, ws.buf[:len(b)])
-		ws.buf = ws.buf[len(b):]
-		return len(b), nil
-	}
-
-	_, wsb, err := ws.ws.Read(context.Background())
-	if err != nil {
-		return len(wsb), err
-	}
-
-	if len(wsb) > len(b) {
-		copy(b, wsb[:len(b)])
-		ws.buf = make([]byte, len(wsb[len(b):]))
-		copy(ws.buf, wsb[len(b):])
-		return len(b), nil
-	}
-	copy(b, wsb)
-	return len(wsb), nil
-}
-
-func (ws *WSReadWrite) Write(p []byte) (n int, err error) {
-	err = ws.ws.Write(context.Background(), websocket.MessageBinary, p)
-	return len(p), err
 }
