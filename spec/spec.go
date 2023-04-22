@@ -26,7 +26,6 @@ type WSConn interface {
 type WSStreamConn struct {
 	wsConn        WSConn
 	addr          net.Addr
-	deadline      *time.Time
 	readDeadline  *time.Time
 	writeDeadline *time.Time
 	buf           []byte
@@ -59,10 +58,6 @@ func (c *WSStreamConn) Read(b []byte) (n int, err error) {
 		_ctx, cancel := context.WithDeadline(context.Background(), *c.readDeadline)
 		ctx = _ctx
 		defer cancel()
-	} else if c.deadline != nil {
-		_ctx, cancel := context.WithDeadline(context.Background(), *c.deadline)
-		ctx = _ctx
-		defer cancel()
 	}
 
 	wsb, err := c.wsConn.Read(ctx)
@@ -91,10 +86,6 @@ func (c *WSStreamConn) Write(b []byte) (n int, err error) {
 	ctx := context.Background()
 	if c.writeDeadline != nil {
 		_ctx, cancel := context.WithDeadline(context.Background(), *c.writeDeadline)
-		ctx = _ctx
-		defer cancel()
-	} else if c.deadline != nil {
-		_ctx, cancel := context.WithDeadline(context.Background(), *c.deadline)
 		ctx = _ctx
 		defer cancel()
 	}
@@ -141,7 +132,8 @@ func (c *WSStreamConn) RemoteAddr() net.Addr {
 //
 // A zero value for t means I/O operations will not time out.
 func (c *WSStreamConn) SetDeadline(t time.Time) error {
-	c.deadline = &t
+	c.readDeadline = &t
+	c.writeDeadline = &t
 	return nil
 }
 
