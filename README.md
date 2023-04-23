@@ -1,15 +1,17 @@
 # Introduction
 
-`toh` is tcp over http. 
+`toh` is tcp over http
 
 ### Client
 ```
+package main
+
 import (
 	"context"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"os"
 
 	"github.com/rkonfj/toh/client"
 )
@@ -36,13 +38,9 @@ func main() {
 		panic(err)
 	}
 
-	b, err := io.ReadAll(resp.Body)
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Println(string(b))
+	io.Copy(os.Stdout, resp.Body)
 }
+
 ```
 
 ### Server
@@ -75,7 +73,7 @@ time="2023-04-20T02:39:45-04:00" level=info msg="server listen 0.0.0.0:9986 now"
 ```
 server {
 	listen 443 ssl;
-	server_name l4us.fnla.io;
+	server_name l4us.synf.in;
 
 	ssl_certificate     tls.crt;
 	ssl_certificate_key tls.key;
