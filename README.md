@@ -86,7 +86,7 @@ server {
 
 ```
 # ./toh pf --help
-Client fot port-forwarding 
+Client for port-forwarding 
 
 Usage:
   toh pf [flags]

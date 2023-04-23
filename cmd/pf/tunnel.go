@@ -8,7 +8,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/rkonfj/toh/client"
 	"github.com/sirupsen/logrus"
 )
@@ -28,6 +30,7 @@ type mapping struct {
 	network string
 	local   string
 	remote  string
+	bo      backoff.BackOff
 }
 
 func NewTunnelManager(opts Options) (*TunnelManager, error) {
@@ -47,7 +50,7 @@ func NewTunnelManager(opts Options) (*TunnelManager, error) {
 		if len(mp) != 3 {
 			return nil, errors.New("invalid forward " + f)
 		}
-		forwards = append(forwards, mapping{network: mp[0], local: mp[1], remote: mp[2]})
+		forwards = append(forwards, mapping{network: mp[0], local: mp[1], remote: mp[2], bo: backoff.NewExponentialBackOff()})
 	}
 
 	return &TunnelManager{
@@ -68,44 +71,46 @@ func (t *TunnelManager) Run() {
 }
 
 func (t *TunnelManager) forward(mp mapping) {
+	defer t.wg.Done()
 	if mp.network == "tcp" {
 		listener, err := net.Listen(mp.network, mp.local)
 		if err != nil {
-			logrus.Error(err)
-			t.wg.Done()
+			logrus.Error("[tcp] ", err)
 			return
 		}
 		for {
 			conn, err := listener.Accept()
 			if err != nil {
-				logrus.Error(err)
+				logrus.Error("[tcp] ", err)
 				break
 			}
 
 			rConn, err := t.client.DialTCP(context.Background(), mp.remote)
 			if err != nil {
 				conn.Close()
-				logrus.Error(err)
+				logrus.Error("[tcp] ", err)
+				break
 			}
-
+			mp.bo.Reset()
 			go pipe(conn, rConn)
 		}
-		t.wg.Done()
+		listener.Close()
+		time.Sleep(mp.bo.NextBackOff())
+		t.wg.Add(1)
+		go t.forward(mp)
 		return
 	}
 
 	if mp.network == "udp" {
 		host, port, err := net.SplitHostPort(mp.local)
 		if err != nil {
-			logrus.Error(err)
-			t.wg.Done()
+			logrus.Error("[udp] ", err)
 			return
 		}
 
 		_port, err := strconv.ParseInt(port, 10, 32)
 		if err != nil {
-			logrus.Error(err)
-			t.wg.Done()
+			logrus.Error("[udp] ", err)
 			return
 		}
 
@@ -114,20 +119,24 @@ func (t *TunnelManager) forward(mp mapping) {
 			IP:   net.ParseIP(host),
 		})
 		if err != nil {
-			logrus.Error(err)
-			t.wg.Done()
+			logrus.Error("[udp] ", err)
 			return
 		}
 		rConn, err := t.client.DialUDP(context.Background(), mp.remote)
-		if err != nil {
-			logrus.Error(err)
-			t.wg.Done()
+		if err == nil {
+			mp.bo.Reset()
+			pipeUDP(conn, rConn)
 		}
-		pipeUDP(conn, rConn)
-		t.forward(mp)
+		if err != nil {
+			logrus.Error("[udp] ", err)
+		}
+		conn.Close()
+		time.Sleep(mp.bo.NextBackOff())
+		t.wg.Add(1)
+		go t.forward(mp)
+		return
 	}
 	logrus.Error("unsupport network ", mp.network)
-	t.wg.Done()
 }
 
 func pipe(l, r net.Conn) {
@@ -150,7 +159,7 @@ func pipeUDP(l net.PacketConn, r net.Conn) {
 				r.Close()
 				break
 			}
-			n, err = r.Write(buf[:n])
+			_, err = r.Write(buf[:n])
 			if err != nil {
 				l.Close()
 				break
@@ -165,7 +174,7 @@ func pipeUDP(l net.PacketConn, r net.Conn) {
 			l.Close()
 			break
 		}
-		n, err = l.WriteTo(buf[:n], localAddr)
+		_, err = l.WriteTo(buf[:n], localAddr)
 		if err != nil {
 			r.Close()
 			break
