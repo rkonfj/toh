@@ -10,7 +10,7 @@ var Cmd *cobra.Command
 func init() {
 	Cmd = &cobra.Command{
 		Use:     "pf",
-		Short:   "Port-forward client",
+		Short:   "Client fot port-forwarding",
 		Args:    cobra.NoArgs,
 		PreRunE: initAction,
 		RunE:    startAction,

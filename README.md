@@ -86,7 +86,7 @@ server {
 
 ```
 # ./toh pf --help
-Port-forward client
+Client fot port-forwarding 
 
 Usage:
   toh pf [flags]
@@ -98,12 +98,22 @@ Flags:
       --log-level string   logrus logger level (default "info")
   -s, --server string      the ToH server address
 
-# ./pf -s wss://l4us.synf.in/ws -k 5868a941-3025-4c6d-ad3a-41e29bb42e5f -f udp/0.0.0.0:1053/8.8.8.8:53
+# ./pf -s wss://l4us.synf.in/ws -k 5868a941-3025-4c6d-ad3a-41e29bb42e5f -f udp/0.0.0.0:1053/8.8.8.8:53 -f tcp/0.0.0.0:1080:google.com:80
 INFO[2023-04-23T02:57:11-04:00] listen udp://0.0.0.0:1053 for 8.8.8.8:53 now
+INFO[2023-04-23T02:57:11-04:00] listen tcp://0.0.0.0:8080 for google.com:80 now
 INFO[2023-04-23T02:57:11-04:00] udp://8.8.8.8:53 established successfully, toh latency 230.856ms
 ```
 
 another shell
 ```
-# dig @127.0.0.1 -p 1053 www.google.com
+# dig @127.0.0.1 -p 1053 www.google.com +short
+142.250.68.4
+
+# curl 127.0.0.1:8080
+<HTML><HEAD><meta http-equiv="content-type" content="text/html;charset=utf-8">
+<TITLE>301 Moved</TITLE></HEAD><BODY>
+<H1>301 Moved</H1>
+The document has moved
+<A HREF="http://www.google.com:8080/">here</A>.
+</BODY></HTML>
 ```
