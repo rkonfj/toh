@@ -42,20 +42,13 @@ func main() {
 }
 
 ```
-
 ### Server
-- Build
-```sh
-git clone https://github.com/rkonfj/toh.git
-go build -ldflags "-s -w"
-```
-
-- Usage
-
 **As nginx backend**
 ```
-# ./toh --help
-A tcp over http/ws server daemon
+# git clone https://github.com/rkonfj/toh.git
+# go build -ldflags "-s -w"
+# ./toh server --help
+Server daemon
 
 Usage:
   toh [flags]
@@ -65,7 +58,7 @@ Flags:
   -h, --help               help for toh
   -l, --listen string      http server listen address (ip:port) (default "0.0.0.0:9986")
       --log-level string   logrus logger level (default "info")
-# ./toh 
+# ./toh server
 time="2023-04-20T02:39:45-04:00" level=info msg="acl: load 1 keys"
 time="2023-04-20T02:39:45-04:00" level=info msg="server listen 0.0.0.0:9986 now"
 ```
@@ -88,4 +81,29 @@ server {
 		proxy_set_header Connection upgrade;
 	}
 }
+```
+**Buildin port-forward tool**
+
+```
+# ./toh pf --help
+Port-forward client
+
+Usage:
+  toh pf [flags]
+
+Flags:
+  -k, --api-key string     the ToH api-key for authcate
+  -f, --forward strings    tunnel mapping (<net>/<local>/<remote>, ie: udp/0.0.0.0:53/8.8.8.8:53)
+  -h, --help               help for pf
+      --log-level string   logrus logger level (default "info")
+  -s, --server string      the ToH server address
+
+# ./pf -s wss://l4us.synf.in/ws -k 5868a941-3025-4c6d-ad3a-41e29bb42e5f -f udp/0.0.0.0:1053/8.8.8.8:53
+INFO[2023-04-23T02:57:11-04:00] listen udp://0.0.0.0:1053 for 8.8.8.8:53 now
+INFO[2023-04-23T02:57:11-04:00] udp://8.8.8.8:53 established successfully, toh latency 230.856ms
+```
+
+another shell
+```
+# dig @127.0.0.1 -p 1053 www.google.com
 ```
