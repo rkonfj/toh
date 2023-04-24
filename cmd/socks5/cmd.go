@@ -84,22 +84,25 @@ func processOptions(cmd *cobra.Command) (opts *Options, err error) {
 		if err != nil {
 			return nil, err
 		}
-		opts = &Options{
-			Listen: "0.0.0.0:2080",
-			Servers: []TohServer{{
-				Name:    "us1",
-				Api:     "wss://us-l4-vultr.synf.in/ws",
-				Key:     "5868a941-3025-4c6d-ad3a-41e29bb42e5f",
-				Ruleset: "https://file.synf.in/toh/rules/default.txt",
-			}},
-		}
+		opts = defaultOptions()
 		enc := yaml.NewEncoder(spec.NewConfigWriter(optsF))
 		enc.SetIndent(2)
 		err = enc.Encode(opts)
 		return
 	}
-
 	opts = &Options{}
 	err = yaml.NewDecoder(optsF).Decode(opts)
 	return
+}
+
+func defaultOptions() *Options {
+	return &Options{
+		Listen: "0.0.0.0:2080",
+		Servers: []TohServer{{
+			Name:    "us1",
+			Api:     "wss://us-l4-vultr.synf.in/ws",
+			Key:     "5868a941-3025-4c6d-ad3a-41e29bb42e5f",
+			Ruleset: "https://file.synf.in/toh/rules/default.txt",
+		}},
+	}
 }
