@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/google/uuid"
+	"github.com/rkonfj/toh/spec"
 	"github.com/sirupsen/logrus"
 )
 
@@ -29,14 +30,18 @@ func NewACL(aclPath string) (*ACL, error) {
 	var sto ACLStorage
 	aclF, err := os.Open(aclPath)
 	if err != nil {
+		if !os.IsNotExist(err) {
+			return nil, err
+		}
+		logrus.Infof("initializing ack file %s", aclPath)
 		aclF, err = os.OpenFile(aclPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 		if err != nil {
 			return nil, err
 		}
 		sto = ACLStorage{
-			Keys: []Key{{Name: "system", Key: uuid.New().String()}},
+			Keys: []Key{{Name: "default", Key: uuid.New().String()}},
 		}
-		enc := json.NewEncoder(aclF)
+		enc := json.NewEncoder(spec.NewConfigWriter(aclF))
 		enc.SetIndent("", "    ")
 		enc.Encode(sto)
 	} else {

@@ -23,9 +23,20 @@ Flags:
   -l, --listen string      http server listen address (ip:port) (default "0.0.0.0:9986")
       --log-level string   logrus logger level (default "info")
 # ./toh server
-time="2023-04-20T02:39:45-04:00" level=info msg="acl: load 1 keys"
-time="2023-04-20T02:39:45-04:00" level=info msg="server listen 0.0.0.0:9986 now"
+INFO[2023-04-24T19:35:12+08:00] initializing ack file acl.json               
+{
+    "keys": [
+        {
+            "name": "default",
+            "key": "8bed5424-5058-434d-b1d7-ba7db0d780af"
+        }
+    ]
+}
+INFO[2023-04-24T19:35:12+08:00] acl: load 1 keys                             
+INFO[2023-04-24T19:35:12+08:00] server listen 0.0.0.0:9986 now
 ```
+the `key` here will used by `pf` or `socks5`
+
 **Nginx**
 ```
 server {
@@ -46,7 +57,7 @@ server {
 	}
 }
 ```
-**Buildin port-forward tool `pf` act as client**
+**Buildin port-forward tool `pf` act as ToH client**
 
 ```
 # ./toh pf --help
@@ -79,15 +90,9 @@ another shell
 The document has moved
 <A HREF="http://www.google.com:8080/">here</A>.
 </BODY></HTML>
-
-# https_proxy=socks5://127.0.0.1:2080 curl -i https://www.google.com/generate_204
-HTTP/2 204
-cross-origin-resource-policy: cross-origin
-date: Mon, 24 Apr 2023 01:47:57 GMT
-alt-svc: h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
 ```
 
-**Buildin socks5 proxy server**
+**Buildin socks5 proxy server act as ToH client**
 ```
 # ./toh socks5 --help
 Socks5 proxy server
@@ -96,9 +101,31 @@ Usage:
   toh socks5 [flags]
 
 Flags:
-  -c, --config string   the socks5 server config file (default "toh-socks5.yml")
+  -c, --config string   socks5 server config file (default is $HOME/.config/toh/socks5.yml)
   -h, --help            help for socks5
 
 Global Flags:
       --log-level string   logrus logger level (default "info")
+# ./toh socks5
+INFO[2023-04-24T19:44:25+08:00] initializing config file /home/rkonfj/.config/toh/socks5.yml 
+listen: 0.0.0.0:2080
+servers:
+  - name: us1
+    api: wss://us-l4-vultr.synf.in/ws
+    key: 5868a941-3025-4c6d-ad3a-41e29bb42e5f
+    ruleset: https://file.synf.in/toh/rules/default.txt
+INFO[2023-04-24T19:44:25+08:00] downloading https://file.synf.in/toh/rules/default.txt for us1 ruleset 
+INFO[2023-04-24T19:44:25+08:00] ruleset us1: special 0, direct 0, wildcard 5 
+INFO[2023-04-24T19:44:25+08:00] listen on 0.0.0.0:2080 for socks5 now
+```
+
+the server `us1` is the test server, will stopped in the future
+
+another shell
+```
+# https_proxy=socks5://127.0.0.1:2080 curl -i https://www.google.com/generate_204
+HTTP/2 204
+cross-origin-resource-policy: cross-origin
+date: Mon, 24 Apr 2023 01:47:57 GMT
+alt-svc: h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
 ```

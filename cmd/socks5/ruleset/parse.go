@@ -2,10 +2,12 @@ package ruleset
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/sirupsen/logrus"
 )
@@ -51,7 +53,7 @@ func NewRulesetFromReader(name string, reader io.ReadCloser) (*Ruleset, error) {
 		}
 		rs.wildcardSet = append(rs.wildcardSet, strings.Trim(l, "\n"))
 	}
-	logrus.Infof("%s ruleset: special %d, direct %d, wildcard %d",
+	logrus.Infof("ruleset %s: special %d, direct %d, wildcard %d",
 		name, len(rs.specialSet), len(rs.directSet), len(rs.wildcardSet))
 	return &rs, nil
 }
@@ -65,9 +67,13 @@ func NewRulesetFromFile(name, filename string) (*Ruleset, error) {
 }
 
 func NewRulesetFromURL(name, url string) (*Ruleset, error) {
-	resp, err := http.DefaultClient.Get(url)
+	logrus.Infof("downloading %s for %s ruleset", url, name)
+	resp, err := (&http.Client{Timeout: 3 * time.Second}).Get(url)
 	if err != nil {
 		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("%s %s", url, resp.Status)
 	}
 	return NewRulesetFromReader(name, resp.Body)
 }

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/rkonfj/toh/spec"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -74,24 +75,27 @@ func processOptions(cmd *cobra.Command) (opts *Options, err error) {
 		if !os.IsNotExist(err) {
 			return nil, err
 		}
-		err = os.MkdirAll(filepath.Join(homeDir, ".config", "toh"), 0644)
+		logrus.Infof("initializing config file %s", configPath)
+		err = os.MkdirAll(filepath.Join(homeDir, ".config", "toh"), 0755)
 		if err != nil {
 			return nil, err
 		}
-		optsF, err = os.OpenFile(configPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+		optsF, err = os.OpenFile(configPath, os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
 			return nil, err
 		}
 		opts = &Options{
 			Listen: "0.0.0.0:2080",
 			Servers: []TohServer{{
-				Name:    "sys",
+				Name:    "us1",
 				Api:     "wss://us-l4-vultr.synf.in/ws",
 				Key:     "5868a941-3025-4c6d-ad3a-41e29bb42e5f",
-				Ruleset: "https://toh.synf.in/rules/program.txt",
+				Ruleset: "https://file.synf.in/toh/rules/default.txt",
 			}},
 		}
-		err = yaml.NewEncoder(optsF).Encode(opts)
+		enc := yaml.NewEncoder(spec.NewConfigWriter(optsF))
+		enc.SetIndent(2)
+		err = enc.Encode(opts)
 		return
 	}
 
