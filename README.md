@@ -1,52 +1,16 @@
 # Introduction
 
-`toh` is tcp over http
+`toh` is tcp over http. short words: proxy your network over websocket
 
-### Client
-```
-package main
-
-import (
-	"context"
-	"io"
-	"net"
-	"net/http"
-	"os"
-
-	"github.com/rkonfj/toh/client"
-)
-
-func main() {
-	c, err := client.NewTohClient(client.Options{
-		ServerAddr: "wss://l4us.synf.in/ws",
-		ApiKey:     "5868a941-3025-4c6d-ad3a-41e29bb42e5f",
-	})
-	if err != nil {
-		panic(err)
-	}
-
-	httpClient := &http.Client{
-		Transport: &http.Transport{
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				return c.DialTCP(ctx, addr)
-			},
-		},
-	}
-
-	resp, err := httpClient.Get("https://www.google.com")
-	if err != nil {
-		panic(err)
-	}
-
-	io.Copy(os.Stdout, resp.Body)
-}
-
-```
-### Server
-**As nginx backend**
+**ToH server as nginx backend**
+- Build
 ```
 # git clone https://github.com/rkonfj/toh.git
 # go build -ldflags "-s -w"
+
+```
+- Run
+```
 # ./toh server --help
 Server daemon
 
@@ -82,31 +46,32 @@ server {
 	}
 }
 ```
-**Buildin port-forward tool**
+**Buildin port-forward tool `pf` act as client**
 
 ```
 # ./toh pf --help
-Client for port-forwarding 
+Client for port-forwarding
 
 Usage:
   toh pf [flags]
 
 Flags:
-  -k, --api-key string     the ToH api-key for authcate
-  -f, --forward strings    tunnel mapping (<net>/<local>/<remote>, ie: udp/0.0.0.0:53/8.8.8.8:53)
-  -h, --help               help for pf
-      --log-level string   logrus logger level (default "info")
-  -s, --server string      the ToH server address
+  -k, --api-key string    the ToH api-key for authcate
+  -f, --forward strings   tunnel mapping (<net>/<local>/<remote>, ie: udp/0.0.0.0:53/8.8.8.8:53)
+  -h, --help              help for pf
+  -s, --server string     the ToH server address
+      --socks5 string     socks5 server (default "0.0.0.0:2080")
 
-# ./pf -s wss://l4us.synf.in/ws -k 5868a941-3025-4c6d-ad3a-41e29bb42e5f -f udp/0.0.0.0:1053/8.8.8.8:53 -f tcp/0.0.0.0:1080:google.com:80
-INFO[2023-04-23T02:57:11-04:00] listen udp://0.0.0.0:1053 for 8.8.8.8:53 now
-INFO[2023-04-23T02:57:11-04:00] listen tcp://0.0.0.0:8080 for google.com:80 now
-INFO[2023-04-23T02:57:11-04:00] udp://8.8.8.8:53 established successfully, toh latency 230.856ms
+# ./toh pf -s wss://l4us.synf.in/ws -k 5868a941-3025-4c6d-ad3a-41e29bb42e5f -f udp/127.0.0.53:53/8.8.8.8:53 -f tcp/0.0.0.0:1080/google.com:80
+INFO[2023-04-24T09:47:13+08:00] listen udp://127.0.0.53:53 for 8.8.8.8:53 now
+INFO[2023-04-24T09:43:32+08:00] listen tcp://0.0.0.0:1080 for google.com:80 now
+INFO[2023-04-24T09:43:32+08:00] socks5 listen on 0.0.0.0:2080 now
+INFO[2023-04-24T09:43:32+08:00] udp://8.8.8.8:53 established successfully, toh latency 753.098828ms
 ```
 
 another shell
 ```
-# dig @127.0.0.1 -p 1053 www.google.com +short
+# dig @127.0.0.53 www.google.com +short
 142.250.68.4
 
 # curl 127.0.0.1:8080
@@ -116,4 +81,10 @@ another shell
 The document has moved
 <A HREF="http://www.google.com:8080/">here</A>.
 </BODY></HTML>
+
+# https_proxy=socks5://127.0.0.1:2080 curl -i https://www.google.com/generate_204
+HTTP/2 204
+cross-origin-resource-policy: cross-origin
+date: Mon, 24 Apr 2023 01:47:57 GMT
+alt-svc: h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
 ```

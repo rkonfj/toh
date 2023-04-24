@@ -71,7 +71,8 @@ func (t *TunnelManager) Run() {
 		t.wg.Add(1)
 		ss := socks5.NewSocks5Server(socks5.Options{
 			Listen:    t.socks5,
-			TcpDialer: t.client.DialTCP,
+			TCPDialer: t.client.DialTCP,
+			UDPDialer: t.client.DialUDP,
 		})
 		go func() {
 			defer t.wg.Done()

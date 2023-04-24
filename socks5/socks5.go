@@ -13,7 +13,8 @@ import (
 
 type Options struct {
 	Listen    string
-	TcpDialer func(ctx context.Context, addr string) (net.Conn, error)
+	TCPDialer func(ctx context.Context, addr string) (net.Conn, error)
+	UDPDialer func(ctx context.Context, addr string) (net.Conn, error)
 }
 
 type Socks5Server struct {
@@ -38,22 +39,25 @@ func (s *Socks5Server) Run() error {
 		if err != nil {
 			return err
 		}
-
 		go func() {
 			buf := make([]byte, 1024)
-			rConn := s.handshake(conn, buf)
-			if rConn != nil {
-				s.pipe(conn, rConn)
+			tcpConn, udpConn := s.handshake(conn, buf)
+			if udpConn == nil {
+				s.pipe(conn, tcpConn)
+				return
 			}
+			s.pipe(tcpConn, udpConn)
 		}()
 	}
 }
-func (s *Socks5Server) handshake(conn net.Conn, buf []byte) (rConn net.Conn) {
+
+func (s *Socks5Server) handshake(conn net.Conn, buf []byte) (tcpConn, udpConn net.Conn) {
 	defer func() {
-		if rConn == nil {
+		if tcpConn == nil {
 			conn.Close()
 		}
 	}()
+
 	// auth
 	n, err := conn.Read(buf[:2])
 	if err != nil || n != 2 || buf[0] != 5 {
@@ -116,19 +120,19 @@ func (s *Socks5Server) handshake(conn net.Conn, buf []byte) (rConn net.Conn) {
 		logrus.Debug("handle command error @read-port")
 		return
 	}
-
 	port := spec.BytesToUint16(buf[:2])
 
+	switch cmd {
 	// 1. CONNECT
-	if cmd == 1 {
-		rConn, err := s.opts.TcpDialer(context.Background(), fmt.Sprintf("%s:%d", addr, port))
+	case 1:
+		tcpConn, err = s.opts.TCPDialer(context.Background(), fmt.Sprintf("%s:%d", addr, port))
 		if err != nil {
 			logrus.Debug("handle command error @CONNECT ", err)
-			return nil
+			return
 		}
 		conn.Write([]byte{0x05, 0x00, 0x00, 0x01})
-		if rConn.LocalAddr() != nil {
-			addrPort := netip.MustParseAddrPort(rConn.LocalAddr().String())
+		if tcpConn.LocalAddr() != nil {
+			addrPort := netip.MustParseAddrPort(tcpConn.LocalAddr().String())
 			ip := addrPort.Addr().As4()
 			conn.Write(ip[:])
 			conn.Write(spec.Uint16ToBytes(addrPort.Port()))
@@ -136,11 +140,30 @@ func (s *Socks5Server) handshake(conn net.Conn, buf []byte) (rConn net.Conn) {
 			conn.Write([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 		}
 
-		return rConn
+		return
+	// 2. UDP ASSOCIATE
+	case 3:
+		tcpConn, err = s.opts.UDPDialer(context.Background(), fmt.Sprintf("%s:%d", addr, port))
+		if err != nil {
+			logrus.Debug("handle command error @UDP ", err)
+			return
+		}
+		udpConn, err = net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(0, 0, 0, 0), Port: 0})
+		if err != nil {
+			logrus.Debug("handle command error @UDP listener")
+			return
+		}
+		conn.Write([]byte{0x05, 0x00, 0x00, 0x01})
+		addrPort := netip.MustParseAddrPort(udpConn.LocalAddr().String())
+		ip := addrPort.Addr().As4()
+		conn.Write(ip[:])
+		conn.Write(spec.Uint16ToBytes(addrPort.Port()))
+		return
+	default:
+		logrus.Debug("handle command error @unsupported")
+		// 3. do not support BIND now
 	}
-	logrus.Debug("handle command error @unsupported")
-	// 2. do not support BIND and UDP ASSOCIATE now
-	return nil
+	return
 }
 
 func (s *Socks5Server) pipe(conn, rConn net.Conn) {
