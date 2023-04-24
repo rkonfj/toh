@@ -2,13 +2,16 @@ package ruleset
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/rkonfj/toh/spec"
 	"github.com/sirupsen/logrus"
 )
 
@@ -68,7 +71,19 @@ func NewRulesetFromFile(name, filename string) (*Ruleset, error) {
 
 func NewRulesetFromURL(name, url string) (*Ruleset, error) {
 	logrus.Infof("downloading %s for %s ruleset", url, name)
-	resp, err := (&http.Client{Timeout: 5 * time.Second}).Get(url)
+	resp, err := (&http.Client{
+		Timeout: 15 * time.Second,
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				dialer := net.Dialer{}
+				ipAddr, err := spec.ResolveIP(ctx, dialer, addr)
+				if err != nil {
+					return nil, err
+				}
+				return dialer.DialContext(ctx, network, ipAddr)
+			},
+		},
+	}).Get(url)
 	if err != nil {
 		return nil, err
 	}

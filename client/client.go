@@ -2,7 +2,6 @@ package client
 
 import (
 	"context"
-	"fmt"
 	"math/rand"
 	"net"
 	"net/http"
@@ -28,23 +27,12 @@ func NewTohClient(options Options) (*TohClient, error) {
 	httpClient := &http.Client{
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, network, addr string) (conn net.Conn, err error) {
-				dialer := &net.Dialer{}
-				host, port, err := net.SplitHostPort(addr)
+				dialer := net.Dialer{}
+				ipAddr, err := spec.ResolveIP(ctx, dialer, addr)
 				if err != nil {
-					return
+					return nil, err
 				}
-				dnsLookupCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
-				defer cancel()
-				ips, err := (&net.Resolver{
-					Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
-						return dialer.DialContext(ctx, "tcp", "8.8.8.8:53")
-					},
-				}).LookupIP(dnsLookupCtx, "ip", host)
-				if err != nil {
-					return
-				}
-				conn, err = dialer.DialContext(ctx, network, fmt.Sprintf("%s:%s", ips[rand.Intn(len(ips))], port))
-				return
+				return dialer.DialContext(ctx, network, ipAddr)
 			},
 		},
 	}

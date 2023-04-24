@@ -2,41 +2,52 @@ package socks5_cmd
 
 import (
 	"context"
+	"io"
 	"math/rand"
 	"net"
+	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/oschwald/geoip2-golang"
 	"github.com/rkonfj/toh/client"
 	"github.com/rkonfj/toh/cmd/socks5/ruleset"
 	"github.com/rkonfj/toh/socks5"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/exp/slices"
 )
 
 type Options struct {
+	Geoip2  string      `yaml:"geoip2"`
 	Listen  string      `yaml:"listen"`
 	Servers []TohServer `yaml:"servers"`
 }
 
 type TohServer struct {
-	Name    string `yaml:"name"`
-	Api     string `yaml:"api"`
-	Key     string `yaml:"key"`
-	Ruleset string `yaml:"ruleset"`
+	Name          string   `yaml:"name"`
+	Api           string   `yaml:"api"`
+	Key           string   `yaml:"key"`
+	Ruleset       string   `yaml:"ruleset"`
+	DirectCountry []string `yaml:"countryCode"`
 }
 
 type RulebasedSocks5Server struct {
 	opts          Options
 	servers       []*ToH
 	defaultDialer net.Dialer
+	geoip2db      *geoip2.Reader
 }
 
 type ToH struct {
 	name    string
+	dc      []string
 	client  *client.TohClient
 	ruleset *ruleset.Ruleset
 }
 
-func NewSocks5Server(opts *Options) (*RulebasedSocks5Server, error) {
+func NewSocks5Server(dataPath string, opts *Options) (*RulebasedSocks5Server, error) {
 	var servers []*ToH
 	for _, s := range opts.Servers {
 		c, err := client.NewTohClient(client.Options{
@@ -56,16 +67,24 @@ func NewSocks5Server(opts *Options) (*RulebasedSocks5Server, error) {
 		if err != nil {
 			return nil, err
 		}
-		servers = append(servers, &ToH{
+		server := &ToH{
 			name:    s.Name,
 			client:  c,
+			dc:      s.DirectCountry,
 			ruleset: rs,
-		})
+		}
+		servers = append(servers, server)
+	}
+	httpClient := securityHttpClient(servers)
+	db, err := openGeoip2(httpClient, dataPath, opts.Geoip2)
+	if err != nil {
+		return nil, err
 	}
 	return &RulebasedSocks5Server{
 		opts:          *opts,
 		servers:       servers,
 		defaultDialer: net.Dialer{},
+		geoip2db:      db,
 	}, nil
 }
 
@@ -84,6 +103,18 @@ func (s *RulebasedSocks5Server) dialTCP(ctx context.Context, addr string) (net.C
 		return nil, err
 	}
 
+	ip := net.ParseIP(host)
+	if ip != nil {
+		c, err := s.geoip2db.Country(ip)
+		if err != nil {
+			return nil, err
+		}
+		if server := s.selectServerByDirectCountry(c.Country.IsoCode); server != nil {
+			logrus.Infof("%s using %s", addr, server.name)
+			return server.client.DialTCP(ctx, addr)
+		}
+	}
+
 	for _, toh := range s.servers {
 		if toh.ruleset.SpecialMatch(host) {
 			logrus.Infof("%s using %s", addr, toh.name)
@@ -97,10 +128,82 @@ func (s *RulebasedSocks5Server) dialTCP(ctx context.Context, addr string) (net.C
 			return toh.client.DialTCP(ctx, addr)
 		}
 	}
+
 	logrus.Infof("%s using direct", addr)
 	return s.defaultDialer.DialContext(ctx, "tcp", addr)
 }
 
 func (s *RulebasedSocks5Server) dialUDP(ctx context.Context, addr string) (net.Conn, error) {
 	return s.servers[rand.Intn(len(s.servers))].client.DialUDP(ctx, addr)
+}
+
+func (s *RulebasedSocks5Server) selectServerByDirectCountry(c string) *ToH {
+	var suitableServers []*ToH
+	for _, s := range s.servers {
+		if !slices.Contains(s.dc, c) {
+			suitableServers = append(suitableServers, s)
+		}
+	}
+	if len(suitableServers) == 0 {
+		return nil
+	}
+	return selectServer(suitableServers)
+}
+
+func selectServer(servers []*ToH) *ToH {
+	return servers[rand.Intn(len(servers))]
+}
+
+func securityHttpClient(servers []*ToH) *http.Client {
+	return &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				return selectServer(servers).client.DialTCP(ctx, addr)
+			},
+		},
+	}
+}
+
+func openGeoip2(httpClient *http.Client, dataPath, geoip2Path string) (*geoip2.Reader, error) {
+	db, err := geoip2.Open(getGeoip2Path(httpClient, dataPath, geoip2Path))
+	if err != nil {
+		if strings.Contains(err.Error(), "invalid MaxMind") {
+			logrus.Info("removed invalid country.mmdb file")
+			os.Remove(geoip2Path)
+			return openGeoip2(httpClient, dataPath,
+				getGeoip2Path(httpClient, dataPath, ""))
+		}
+		if strings.Contains(err.Error(), "no such file") {
+			return openGeoip2(httpClient, dataPath,
+				getGeoip2Path(httpClient, dataPath, ""))
+		}
+		return nil, err
+	}
+	return db, nil
+}
+
+func getGeoip2Path(hc *http.Client, dataPath, geoip2Path string) string {
+	if geoip2Path != "" {
+		if filepath.IsAbs(geoip2Path) {
+			return geoip2Path
+		}
+		return filepath.Join(dataPath, geoip2Path)
+	}
+	logrus.Info("downloading country.mmdb to ", dataPath)
+	mmdbPath := filepath.Join(dataPath, "country.mmdb")
+	resp, err := hc.Get("https://github.com/Dreamacro/maxmind-geoip/releases/latest/download/Country.mmdb")
+	if err != nil {
+		logrus.Error("download geoip2 country.mmdb ", err)
+		return mmdbPath
+	}
+	defer resp.Body.Close()
+	mmdb, err := os.OpenFile(mmdbPath, os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		logrus.Errorf("open %s %s", mmdbPath, err)
+		return mmdbPath
+	}
+	defer mmdb.Close()
+	io.Copy(mmdb, resp.Body)
+	return mmdbPath
 }
