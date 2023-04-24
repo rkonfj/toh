@@ -68,7 +68,7 @@ func NewRulesetFromFile(name, filename string) (*Ruleset, error) {
 
 func NewRulesetFromURL(name, url string) (*Ruleset, error) {
 	logrus.Infof("downloading %s for %s ruleset", url, name)
-	resp, err := (&http.Client{Timeout: 3 * time.Second}).Get(url)
+	resp, err := (&http.Client{Timeout: 5 * time.Second}).Get(url)
 	if err != nil {
 		return nil, err
 	}
