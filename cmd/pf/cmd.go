@@ -17,7 +17,6 @@ func init() {
 	}
 	Cmd.Flags().StringP("server", "s", "", "the ToH server address")
 	Cmd.Flags().StringP("api-key", "k", "", "the ToH api-key for authcate")
-	Cmd.Flags().String("socks5", "0.0.0.0:2080", "socks5 server")
 	Cmd.Flags().StringSliceP("forward", "f", []string{}, "tunnel mapping (<net>/<local>/<remote>, ie: udp/0.0.0.0:53/8.8.8.8:53)")
 
 	Cmd.MarkFlagRequired("server")
@@ -63,9 +62,5 @@ func processOptions(cmd *cobra.Command) (options Options, err error) {
 		return
 	}
 	options.apiKey, err = cmd.Flags().GetString("api-key")
-	if err != nil {
-		return
-	}
-	options.socks5, err = cmd.Flags().GetString("socks5")
 	return
 }

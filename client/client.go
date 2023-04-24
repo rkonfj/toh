@@ -104,7 +104,7 @@ func (c *TohClient) dial(ctx context.Context, network, addr string) (conn *webso
 	if err != nil {
 		return
 	}
-	logrus.Infof("%s://%s established successfully, toh latency %s", network, addr, time.Since(t1))
+	logrus.Debugf("%s://%s established successfully, toh latency %s", network, addr, time.Since(t1))
 	return
 }
 

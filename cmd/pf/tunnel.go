@@ -12,20 +12,17 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/rkonfj/toh/client"
-	"github.com/rkonfj/toh/socks5"
 	"github.com/sirupsen/logrus"
 )
 
 type Options struct {
 	forwards       []string
 	server, apiKey string
-	socks5         string
 }
 
 type TunnelManager struct {
 	client   *client.TohClient
 	forwards []mapping
-	socks5   string
 	wg       sync.WaitGroup
 }
 
@@ -60,28 +57,11 @@ func NewTunnelManager(opts Options) (*TunnelManager, error) {
 		client:   c,
 		wg:       sync.WaitGroup{},
 		forwards: forwards,
-		socks5:   opts.socks5,
 	}, nil
 }
 
 func (t *TunnelManager) Run() {
 	t.wg.Add(len(t.forwards))
-
-	if t.socks5 != "" {
-		t.wg.Add(1)
-		ss := socks5.NewSocks5Server(socks5.Options{
-			Listen:    t.socks5,
-			TCPDialer: t.client.DialTCP,
-			UDPDialer: t.client.DialUDP,
-		})
-		go func() {
-			defer t.wg.Done()
-			err := ss.Run()
-			if err != nil {
-				logrus.Error(err)
-			}
-		}()
-	}
 
 	for _, f := range t.forwards {
 		logrus.Infof("listen on %s for %s://%s now", f.local, f.network, f.remote)

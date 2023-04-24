@@ -65,8 +65,6 @@ Flags:
 # ./toh pf -s wss://l4us.synf.in/ws -k 5868a941-3025-4c6d-ad3a-41e29bb42e5f -f udp/127.0.0.53:53/8.8.8.8:53 -f tcp/0.0.0.0:1080/google.com:80
 INFO[2023-04-24T09:47:13+08:00] listen udp://127.0.0.53:53 for 8.8.8.8:53 now
 INFO[2023-04-24T09:43:32+08:00] listen tcp://0.0.0.0:1080 for google.com:80 now
-INFO[2023-04-24T09:43:32+08:00] socks5 listen on 0.0.0.0:2080 now
-INFO[2023-04-24T09:43:32+08:00] udp://8.8.8.8:53 established successfully, toh latency 753.098828ms
 ```
 
 another shell
@@ -87,4 +85,20 @@ HTTP/2 204
 cross-origin-resource-policy: cross-origin
 date: Mon, 24 Apr 2023 01:47:57 GMT
 alt-svc: h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+```
+
+**Buildin socks5 proxy server**
+```
+# ./toh socks5 --help
+Socks5 proxy server
+
+Usage:
+  toh socks5 [flags]
+
+Flags:
+  -c, --config string   the socks5 server config file (default "toh-socks5.yml")
+  -h, --help            help for socks5
+
+Global Flags:
+      --log-level string   logrus logger level (default "info")
 ```
