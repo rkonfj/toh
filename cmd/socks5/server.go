@@ -2,6 +2,7 @@ package socks5_cmd
 
 import (
 	"context"
+	"math/rand"
 	"net"
 	"strings"
 
@@ -101,5 +102,5 @@ func (s *RulebasedSocks5Server) dialTCP(ctx context.Context, addr string) (net.C
 }
 
 func (s *RulebasedSocks5Server) dialUDP(ctx context.Context, addr string) (net.Conn, error) {
-	return nil, nil
+	return s.servers[rand.Intn(len(s.servers))].client.DialUDP(ctx, addr)
 }
