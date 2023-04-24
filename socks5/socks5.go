@@ -32,7 +32,7 @@ func (s *Socks5Server) Run() error {
 	if err != nil {
 		return err
 	}
-	logrus.Infof("socks5 listen on %s now", s.opts.Listen)
+	logrus.Infof("listen on %s for socks5 now", s.opts.Listen)
 	defer l.Close()
 	for {
 		conn, err := l.Accept()
@@ -167,7 +167,9 @@ func (s *Socks5Server) handshake(conn net.Conn, buf []byte) (tcpConn, udpConn ne
 }
 
 func (s *Socks5Server) pipe(conn, rConn net.Conn) {
-	logrus.Debugf("strat pipeline %s<->%s", conn.RemoteAddr().String(), rConn.RemoteAddr().String())
+	if conn == nil || rConn == nil {
+		return
+	}
 	go func() {
 		io.Copy(conn, rConn)
 		conn.Close()

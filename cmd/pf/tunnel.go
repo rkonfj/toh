@@ -84,7 +84,7 @@ func (t *TunnelManager) Run() {
 	}
 
 	for _, f := range t.forwards {
-		logrus.Infof("listen %s://%s for %s now", f.network, f.local, f.remote)
+		logrus.Infof("listen on %s for %s://%s now", f.local, f.network, f.remote)
 		go t.forward(f)
 	}
 	t.wg.Wait()

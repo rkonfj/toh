@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"net"
 	"net/http"
@@ -14,7 +15,8 @@ import (
 )
 
 type TohClient struct {
-	options Options
+	options    Options
+	httpClient *http.Client
 }
 
 type Options struct {
@@ -23,8 +25,32 @@ type Options struct {
 }
 
 func NewTohClient(options Options) (*TohClient, error) {
+	httpClient := &http.Client{
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (conn net.Conn, err error) {
+				dialer := &net.Dialer{}
+				host, port, err := net.SplitHostPort(addr)
+				if err != nil {
+					return
+				}
+				dnsLookupCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+				defer cancel()
+				ips, err := (&net.Resolver{
+					Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+						return dialer.DialContext(ctx, "tcp", "8.8.8.8:53")
+					},
+				}).LookupIP(dnsLookupCtx, "ip", host)
+				if err != nil {
+					return
+				}
+				conn, err = dialer.DialContext(ctx, network, fmt.Sprintf("%s:%s", ips[rand.Intn(len(ips))], port))
+				return
+			},
+		},
+	}
 	return &TohClient{
-		options: options,
+		options:    options,
+		httpClient: httpClient,
 	}, nil
 }
 
@@ -72,7 +98,9 @@ func (c *TohClient) dial(ctx context.Context, network, addr string) (conn *webso
 	handshake.Add("x-toh-addr", addr)
 
 	t1 := time.Now()
-	conn, _, err = websocket.Dial(ctx, c.options.ServerAddr, &websocket.DialOptions{HTTPHeader: handshake})
+	conn, _, err = websocket.Dial(ctx, c.options.ServerAddr, &websocket.DialOptions{
+		HTTPHeader: handshake, HTTPClient: c.httpClient,
+	})
 	if err != nil {
 		return
 	}

@@ -7,8 +7,8 @@
 ```
 # git clone https://github.com/rkonfj/toh.git
 # go build -ldflags "-s -w"
-
 ```
+
 - Run
 ```
 # ./toh server --help

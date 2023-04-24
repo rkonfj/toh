@@ -67,6 +67,9 @@ func (s *TohServer) Run() {
 }
 
 func (s *TohServer) pipe(wsConn *websocket.Conn, netConn net.Conn) {
+	if wsConn == nil || netConn == nil {
+		return
+	}
 	go func() {
 		io.Copy(netConn, RWWS(wsConn))
 		logrus.Debugf("ws conn closed, close remote conn(%s) now", netConn.RemoteAddr().String())
