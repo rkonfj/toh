@@ -8,6 +8,7 @@
 .googleusercontent.com
 .gstatic.com
 .youtube.com
+.googlevideo.com
 .ytimg.com
 .ggpht.com
 
