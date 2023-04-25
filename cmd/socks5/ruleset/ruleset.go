@@ -36,7 +36,7 @@ func Parse(client spec.TohClient, name string, ruleset []string, datapath string
 		var readCloser io.ReadCloser
 		if r, ok := strings.CutPrefix(ruleLocation, "b64,"); ok {
 			if strings.HasPrefix(r, "https") {
-				readCloser, err = rs.download(r, name)
+				readCloser, err = rs.download(r)
 			} else {
 				readCloser, err = rs.openFile(ensureAbsPath(datapath, r))
 			}
@@ -46,7 +46,7 @@ func Parse(client spec.TohClient, name string, ruleset []string, datapath string
 			reader = base64.NewDecoder(base64.RawStdEncoding, readCloser)
 		} else {
 			if strings.HasPrefix(r, "https") {
-				readCloser, err = rs.download(r, name)
+				readCloser, err = rs.download(r)
 				reader = readCloser
 			} else {
 				readCloser, err = rs.openFile(ensureAbsPath(datapath, r))
@@ -63,11 +63,19 @@ func Parse(client spec.TohClient, name string, ruleset []string, datapath string
 		}
 		readCloser.Close()
 	}
+	logrus.Infof("ruleset %s: special %d, direct %d, wildcard %d",
+		rs.proxy, len(rs.specialSet), len(rs.directSet), len(rs.wildcardSet))
+	if len(rs.directCountrySet) > 0 {
+		logrus.Infof("ruleset %s if-ip: direct %s", rs.proxy, rs.directCountrySet)
+
+	} else if len(rs.proxyCountrySet) > 0 {
+		logrus.Infof("ruleset %s if-ip: proxy %s", rs.proxy, rs.proxyCountrySet)
+	}
 	return
 }
 
-func (rs *Ruleset) download(ruleLocation, proxy string) (reader io.ReadCloser, err error) {
-	logrus.Infof("downloading %s ruleset %s", proxy, ruleLocation)
+func (rs *Ruleset) download(ruleLocation string) (reader io.ReadCloser, err error) {
+	logrus.Infof("downloading %s", ruleLocation)
 	reader, err = readerFromURL(rs.client, ruleLocation)
 	if err != nil {
 		return
@@ -107,35 +115,24 @@ func (rs *Ruleset) LoadFromReader(reader bufio.Reader) error {
 			rs.specialSet = append(rs.specialSet, trim(r))
 			continue
 		}
-		if _, ok := strings.CutPrefix(l, "|"); ok {
-			continue
-		}
 		if r, ok := strings.CutPrefix(l, "@@"); ok {
 			rs.directSet = append(rs.directSet, trim(r))
+			continue
+		}
+		if _, ok := strings.CutPrefix(l, "|"); ok {
 			continue
 		}
 		if _, ok := strings.CutPrefix(l, "!"); ok {
 			continue
 		}
-		if strings.Trim(l, "\n") == "" {
-			logrus.Info("empty string occered")
-		}
 		rs.wildcardSet = append(rs.wildcardSet, trim(l))
-	}
-	logrus.Infof("ruleset %s domain: special %d, direct %d, wildcard %d",
-		rs.proxy, len(rs.specialSet), len(rs.directSet), len(rs.wildcardSet))
-	if len(rs.directCountrySet) > 0 {
-		logrus.Infof("ruleset %s if-ip: direct %s", rs.proxy, rs.directCountrySet)
-
-	} else if len(rs.proxyCountrySet) > 0 {
-		logrus.Infof("ruleset %s if-ip: proxy %s", rs.proxy, rs.proxyCountrySet)
 	}
 	return nil
 }
 
 func (rs *Ruleset) SpecialMatch(host string) bool {
 	for _, r := range rs.specialSet {
-		if host == r {
+		if host == r || host == fmt.Sprintf("www.%s", r) {
 			return true
 		}
 	}

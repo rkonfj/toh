@@ -118,9 +118,10 @@ servers:
   - name: us1
     api: wss://us-l4-vultr.synf.in/ws
     key: 5868a941-3025-4c6d-ad3a-41e29bb42e5f
-    ruleset: https://file.synf.in/toh/rules/default.txt
-INFO[2023-04-24T19:44:25+08:00] downloading https://raw.githubusercontent.com/rkonfj/toh/main/ruleset.txt for us1 ruleset 
-INFO[2023-04-24T19:44:25+08:00] ruleset us1: special 0, direct 0, wildcard 5 
+    ruleset: 
+      - https://raw.githubusercontent.com/rkonfj/toh/main/ruleset.txt
+INFO[2023-04-24T19:44:25+08:00] downloading https://raw.githubusercontent.com/rkonfj/toh/main/ruleset.txt
+INFO[2023-04-24T19:44:25+08:00] ruleset us1: special 0, direct 0, wildcard 12 
 INFO[2023-04-24T19:44:25+08:00] listen on 0.0.0.0:2080 for socks5 now
 ```
 
