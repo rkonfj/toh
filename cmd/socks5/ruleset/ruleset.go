@@ -3,6 +3,7 @@ package ruleset
 import (
 	"bufio"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"net"
@@ -25,12 +26,17 @@ type Ruleset struct {
 	wildcardSet      []string
 }
 
-func NewRulesetFromReader(name string, reader io.ReadCloser) (*Ruleset, error) {
+func NewRulesetFromReader(name string, reader io.ReadCloser, b64 bool) (*Ruleset, error) {
 	rs := Ruleset{proxy: name, specialSet: []string{}, directSet: []string{}, wildcardSet: []string{}}
 	defer reader.Close()
-	fR := bufio.NewReader(reader)
+	var r *bufio.Reader
+	if b64 {
+		r = bufio.NewReader(base64.NewDecoder(base64.RawStdEncoding, reader))
+	} else {
+		r = bufio.NewReader(reader)
+	}
 	for {
-		l, err := fR.ReadString('\n')
+		l, err := r.ReadString('\n')
 		if err == io.EOF {
 			break
 		}
@@ -78,15 +84,23 @@ func NewRulesetFromReader(name string, reader io.ReadCloser) (*Ruleset, error) {
 	return &rs, nil
 }
 
+func NewRulesetFromFileB64(name, filename string) (*Ruleset, error) {
+	f, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	return NewRulesetFromReader(name, f, true)
+}
+
 func NewRulesetFromFile(name, filename string) (*Ruleset, error) {
 	f, err := os.Open(filename)
 	if err != nil {
 		return nil, err
 	}
-	return NewRulesetFromReader(name, f)
+	return NewRulesetFromReader(name, f, false)
 }
 
-func NewRulesetFromURL(name, url string, dial spec.Dial) (*Ruleset, error) {
+func NewRulesetFromURL(name, url string, dial spec.Dial, b64 bool) (*Ruleset, error) {
 	logrus.Infof("downloading %s for %s ruleset", url, name)
 	resp, err := (&http.Client{
 		Timeout: 15 * time.Second,
@@ -106,7 +120,7 @@ func NewRulesetFromURL(name, url string, dial spec.Dial) (*Ruleset, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("%s %s", url, resp.Status)
 	}
-	return NewRulesetFromReader(name, resp.Body)
+	return NewRulesetFromReader(name, resp.Body, b64)
 }
 
 func (rs *Ruleset) SpecialMatch(host string) bool {
