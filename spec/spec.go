@@ -8,6 +8,9 @@ import (
 	"time"
 )
 
+// Dial describe the dial func
+type Dial func(ctx context.Context, addr string) (net.Conn, error)
+
 // TohClient the toh client
 type TohClient interface {
 	DialTCP(ctx context.Context, address string) (net.Conn, error)

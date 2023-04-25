@@ -2,6 +2,7 @@ package socks5_cmd
 
 import (
 	"context"
+	"errors"
 	"io"
 	"math/rand"
 	"net"
@@ -57,7 +58,7 @@ func NewSocks5Server(dataPath string, opts *Options) (*RulebasedSocks5Server, er
 
 		var rs *ruleset.Ruleset
 		if strings.HasPrefix(s.Ruleset, "https") {
-			rs, err = ruleset.NewRulesetFromURL(s.Name, s.Ruleset)
+			rs, err = ruleset.NewRulesetFromURL(s.Name, s.Ruleset, c.DialTCP)
 		} else {
 			rs, err = ruleset.NewRulesetFromFile(s.Name, s.Ruleset)
 		}
@@ -162,7 +163,7 @@ func openGeoip2(httpClient *http.Client, dataPath, geoip2Path string) (*geoip2.R
 			return openGeoip2(httpClient, dataPath,
 				getGeoip2Path(httpClient, dataPath, ""))
 		}
-		if strings.Contains(err.Error(), "no such file") {
+		if errors.Is(err, os.ErrNotExist) {
 			return openGeoip2(httpClient, dataPath,
 				getGeoip2Path(httpClient, dataPath, ""))
 		}

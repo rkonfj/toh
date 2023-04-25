@@ -44,7 +44,7 @@ func RealIP(r *http.Request) string {
 	return tcpAddr.IP.String()
 }
 
-func ResolveIP(ctx context.Context, dialer net.Dialer, addr string) (a string, err error) {
+func ResolveIP(ctx context.Context, dial Dial, addr string) (a string, err error) {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		return
@@ -53,7 +53,7 @@ func ResolveIP(ctx context.Context, dialer net.Dialer, addr string) (a string, e
 	defer cancel()
 	ips, err := (&net.Resolver{
 		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
-			return dialer.DialContext(ctx, "tcp", "8.8.8.8:53")
+			return dial(ctx, "8.8.8.8:53")
 		},
 	}).LookupIP(dnsLookupCtx, "ip", host)
 	if err != nil {

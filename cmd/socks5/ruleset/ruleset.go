@@ -86,18 +86,17 @@ func NewRulesetFromFile(name, filename string) (*Ruleset, error) {
 	return NewRulesetFromReader(name, f)
 }
 
-func NewRulesetFromURL(name, url string) (*Ruleset, error) {
+func NewRulesetFromURL(name, url string, dial spec.Dial) (*Ruleset, error) {
 	logrus.Infof("downloading %s for %s ruleset", url, name)
 	resp, err := (&http.Client{
 		Timeout: 15 * time.Second,
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				dialer := net.Dialer{}
-				ipAddr, err := spec.ResolveIP(ctx, dialer, addr)
+				ipAddr, err := spec.ResolveIP(ctx, dial, addr)
 				if err != nil {
 					return nil, err
 				}
-				return dialer.DialContext(ctx, network, ipAddr)
+				return dial(ctx, ipAddr)
 			},
 		},
 	}).Get(url)

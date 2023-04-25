@@ -28,7 +28,9 @@ func NewTohClient(options Options) (*TohClient, error) {
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, network, addr string) (conn net.Conn, err error) {
 				dialer := net.Dialer{}
-				ipAddr, err := spec.ResolveIP(ctx, dialer, addr)
+				ipAddr, err := spec.ResolveIP(ctx, func(ctx context.Context, addr string) (net.Conn, error) {
+					return dialer.DialContext(ctx, "udp", addr)
+				}, addr)
 				if err != nil {
 					return nil, err
 				}
