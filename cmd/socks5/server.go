@@ -61,13 +61,13 @@ func NewSocks5Server(dataPath string, opts *Options) (*RulebasedSocks5Server, er
 			if strings.HasPrefix(r, "https") {
 				rs, err = ruleset.NewRulesetFromURL(s.Name, r, c.DialTCP, true)
 			} else {
-				rs, err = ruleset.NewRulesetFromFileB64(s.Name, r)
+				rs, err = ruleset.NewRulesetFromFileB64(s.Name, ensureAbsPath(dataPath, r))
 			}
 		} else {
 			if strings.HasPrefix(s.Ruleset, "https") {
 				rs, err = ruleset.NewRulesetFromURL(s.Name, s.Ruleset, c.DialTCP, false)
 			} else {
-				rs, err = ruleset.NewRulesetFromFile(s.Name, s.Ruleset)
+				rs, err = ruleset.NewRulesetFromFile(s.Name, ensureAbsPath(dataPath, s.Ruleset))
 			}
 		}
 		if err != nil {
@@ -203,4 +203,14 @@ func getGeoip2Path(hc *http.Client, dataPath, geoip2Path string) string {
 	defer mmdb.Close()
 	io.Copy(mmdb, resp.Body)
 	return mmdbPath
+}
+
+func ensureAbsPath(datapath, filename string) string {
+	if filename == "" {
+		return ""
+	}
+	if filepath.IsAbs(filename) {
+		return filename
+	}
+	return filepath.Join(datapath, filename)
 }
