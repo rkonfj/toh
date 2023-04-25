@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -100,17 +101,20 @@ func NewRulesetFromFile(name, filename string) (*Ruleset, error) {
 	return NewRulesetFromReader(name, f, false)
 }
 
-func NewRulesetFromURL(name, url string, dial spec.Dial, b64 bool) (*Ruleset, error) {
+func NewRulesetFromURL(name, url string, client spec.TohClient, b64 bool) (*Ruleset, error) {
 	logrus.Infof("downloading %s for %s ruleset", url, name)
 	resp, err := (&http.Client{
 		Timeout: 15 * time.Second,
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				ipAddr, err := spec.ResolveIP(ctx, dial, addr)
+				ipAddr, err := spec.ResolveIP(ctx, client.DialTCP, addr)
 				if err != nil {
+					if strings.Contains(err.Error(), spec.ErrAuth.Error()) {
+						return nil, errors.New("proxy failed, invalid Toh Key")
+					}
 					return nil, err
 				}
-				return dial(ctx, ipAddr)
+				return client.DialTCP(ctx, ipAddr)
 			},
 		},
 	}).Get(url)

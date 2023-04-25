@@ -2,10 +2,15 @@ package spec
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net"
 	"strings"
 	"time"
+)
+
+var (
+	ErrAuth = errors.New("unauthorized, invalid ToH key")
 )
 
 // Dial describe the dial func

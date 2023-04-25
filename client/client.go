@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/rkonfj/toh/spec"
@@ -66,7 +67,7 @@ func (c *TohClient) dial(ctx context.Context, network, addr string) (conn *webso
 		return
 	}
 
-	dnsLookupCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	dnsLookupCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	ips, err := net.DefaultResolver.LookupIP(dnsLookupCtx, "ip", host)
@@ -92,6 +93,10 @@ func (c *TohClient) dial(ctx context.Context, network, addr string) (conn *webso
 		HTTPHeader: handshake, HTTPClient: c.httpClient,
 	})
 	if err != nil {
+		if strings.Contains(err.Error(), "401") {
+			err = spec.ErrAuth
+			return
+		}
 		return
 	}
 	logrus.Debugf("%s://%s established successfully, toh latency %s", network, addr, time.Since(t1))

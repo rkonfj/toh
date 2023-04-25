@@ -60,13 +60,13 @@ func NewSocks5Server(dataPath string, opts *Options) (*RulebasedSocks5Server, er
 		var rs *ruleset.Ruleset
 		if r, ok := strings.CutPrefix(s.Ruleset, "b64,"); ok {
 			if strings.HasPrefix(r, "https") {
-				rs, err = ruleset.NewRulesetFromURL(s.Name, r, c.DialTCP, true)
+				rs, err = ruleset.NewRulesetFromURL(s.Name, r, c, true)
 			} else {
 				rs, err = ruleset.NewRulesetFromFileB64(s.Name, ensureAbsPath(dataPath, r))
 			}
 		} else {
 			if strings.HasPrefix(s.Ruleset, "https") {
-				rs, err = ruleset.NewRulesetFromURL(s.Name, s.Ruleset, c.DialTCP, false)
+				rs, err = ruleset.NewRulesetFromURL(s.Name, s.Ruleset, c, false)
 			} else {
 				rs, err = ruleset.NewRulesetFromFile(s.Name, ensureAbsPath(dataPath, s.Ruleset))
 			}

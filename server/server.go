@@ -34,18 +34,20 @@ func NewTohServer(options Options) (*TohServer, error) {
 
 func (s *TohServer) Run() {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{})
-		if err != nil {
-			logrus.Errorf("%v", err)
-			return
-		}
 		apiKey := r.Header.Get("x-toh-key")
 		network := r.Header.Get("x-toh-net")
 		addr := r.Header.Get("x-toh-addr")
 
 		if !s.acl.Check(apiKey) {
-			conn.Close(websocket.StatusPolicyViolation, "401")
+			w.WriteHeader(http.StatusUnauthorized)
+			w.Write([]byte("401 Unauthorized"))
 			logrus.Infof("%s -> %s://%s auth failed", spec.RealIP(r), network, addr)
+			return
+		}
+
+		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{})
+		if err != nil {
+			logrus.Errorf("%v", err)
 			return
 		}
 
