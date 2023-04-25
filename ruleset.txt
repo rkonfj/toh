@@ -1,0 +1,22 @@
+! This rule document lists some of the more commonly used websites in daily learning for students
+! Under 18 years old, need to be accompanied by parents
+
+! Google
+.google.com
+.gmail.com
+.googleapis.com
+.googleusercontent.com
+.gstatic.com
+.youtube.com
+.ytimg.com
+
+! OpenAI
+.openai.com
+
+! GitHub
+.github.com
+.githubusercontent.com
+
+! WiKi
+.wikipedia.org
+.wikimedia.org

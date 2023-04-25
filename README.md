@@ -1,8 +1,13 @@
 # Introduction
 
 `toh` is tcp over http. short words: proxy your network over websocket
+## Table of contents
+- [ToH server as nginx backend](#ToH-server-as-nginx-backend)
+- [Nginx](#Nginx)
+- [Buildin port-forward tool `pf` act as ToH client](#buildin-port-forward-tool-pf-act-as-toh-client)
+- [Buildin socks5 proxy server act as ToH client](#buildin-socks5-proxy-server-act-as-toh-client)
 
-**ToH server as nginx backend**
+### ToH server as nginx backend
 - Build
 ```
 # git clone https://github.com/rkonfj/toh.git
@@ -37,7 +42,7 @@ INFO[2023-04-24T19:35:12+08:00] server listen 0.0.0.0:9986 now
 ```
 the `key` here will used by `pf` or `socks5`
 
-**Nginx**
+### Nginx
 ```
 server {
 	listen 443 ssl;
@@ -57,7 +62,7 @@ server {
 	}
 }
 ```
-**Buildin port-forward tool `pf` act as ToH client**
+### Buildin port-forward tool `pf` act as ToH client
 
 ```
 # ./toh pf --help
@@ -92,7 +97,7 @@ The document has moved
 </BODY></HTML>
 ```
 
-**Buildin socks5 proxy server act as ToH client**
+### Buildin socks5 proxy server act as ToH client
 ```
 # ./toh socks5 --help
 Socks5 proxy server
@@ -114,7 +119,7 @@ servers:
     api: wss://us-l4-vultr.synf.in/ws
     key: 5868a941-3025-4c6d-ad3a-41e29bb42e5f
     ruleset: https://file.synf.in/toh/rules/default.txt
-INFO[2023-04-24T19:44:25+08:00] downloading https://file.synf.in/toh/rules/default.txt for us1 ruleset 
+INFO[2023-04-24T19:44:25+08:00] downloading https://raw.githubusercontent.com/rkonfj/toh/main/ruleset.txt for us1 ruleset 
 INFO[2023-04-24T19:44:25+08:00] ruleset us1: special 0, direct 0, wildcard 5 
 INFO[2023-04-24T19:44:25+08:00] listen on 0.0.0.0:2080 for socks5 now
 ```
