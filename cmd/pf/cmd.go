@@ -53,14 +53,14 @@ func startAction(cmd *cobra.Command, args []string) error {
 }
 
 func processOptions(cmd *cobra.Command) (options Options, err error) {
-	options.forwards, err = cmd.Flags().GetStringSlice("forward")
+	options.Forwards, err = cmd.Flags().GetStringSlice("forward")
 	if err != nil {
 		return
 	}
-	options.server, err = cmd.Flags().GetString("server")
+	options.Server, err = cmd.Flags().GetString("server")
 	if err != nil {
 		return
 	}
-	options.apiKey, err = cmd.Flags().GetString("api-key")
+	options.ApiKey, err = cmd.Flags().GetString("api-key")
 	return
 }

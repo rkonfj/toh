@@ -16,8 +16,8 @@ import (
 )
 
 type Options struct {
-	forwards       []string
-	server, apiKey string
+	Forwards       []string
+	Server, ApiKey string
 }
 
 type TunnelManager struct {
@@ -35,8 +35,8 @@ type mapping struct {
 
 func NewTunnelManager(opts Options) (*TunnelManager, error) {
 	c, err := client.NewTohClient(client.Options{
-		ServerAddr: opts.server,
-		ApiKey:     opts.apiKey,
+		ServerAddr: opts.Server,
+		ApiKey:     opts.ApiKey,
 	})
 
 	if err != nil {
@@ -45,7 +45,7 @@ func NewTunnelManager(opts Options) (*TunnelManager, error) {
 
 	var forwards []mapping
 
-	for _, f := range opts.forwards {
+	for _, f := range opts.Forwards {
 		mp := strings.Split(f, "/")
 		if len(mp) != 3 {
 			return nil, errors.New("invalid forward " + f)
@@ -64,7 +64,6 @@ func (t *TunnelManager) Run() {
 	t.wg.Add(len(t.forwards))
 
 	for _, f := range t.forwards {
-		logrus.Infof("listen on %s for %s://%s now", f.local, f.network, f.remote)
 		go t.forward(f)
 	}
 	t.wg.Wait()
@@ -78,6 +77,7 @@ func (t *TunnelManager) forward(mp mapping) {
 			logrus.Error("[tcp] ", err)
 			return
 		}
+		logrus.Infof("listen on %s for %s://%s now", mp.local, mp.network, mp.remote)
 		for {
 			conn, err := listener.Accept()
 			if err != nil {
@@ -125,6 +125,7 @@ func (t *TunnelManager) forward(mp mapping) {
 		rConn, err := t.client.DialUDP(context.Background(), mp.remote)
 		if err == nil {
 			mp.bo.Reset()
+			logrus.Infof("listen on %s for %s://%s now", mp.local, mp.network, mp.remote)
 			pipeUDP(conn, rConn)
 		}
 		if err != nil {
