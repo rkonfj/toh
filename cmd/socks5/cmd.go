@@ -106,7 +106,7 @@ func defaultOptions() *Options {
 			Name:    "us1",
 			Api:     "wss://us-l4-vultr.synf.in/ws",
 			Key:     "5868a941-3025-4c6d-ad3a-41e29bb42e5f",
-			Ruleset: "https://raw.githubusercontent.com/rkonfj/toh/main/ruleset.txt",
+			Ruleset: []string{"https://raw.githubusercontent.com/rkonfj/toh/main/ruleset.txt"},
 		}},
 	}
 }

@@ -27,10 +27,10 @@ type Options struct {
 }
 
 type TohServer struct {
-	Name    string `yaml:"name"`
-	Api     string `yaml:"api"`
-	Key     string `yaml:"key"`
-	Ruleset string `yaml:"ruleset"`
+	Name    string   `yaml:"name"`
+	Api     string   `yaml:"api"`
+	Key     string   `yaml:"key"`
+	Ruleset []string `yaml:"ruleset"`
 }
 
 type RulebasedSocks5Server struct {
@@ -57,20 +57,7 @@ func NewSocks5Server(dataPath string, opts *Options) (*RulebasedSocks5Server, er
 			return nil, err
 		}
 
-		var rs *ruleset.Ruleset
-		if r, ok := strings.CutPrefix(s.Ruleset, "b64,"); ok {
-			if strings.HasPrefix(r, "https") {
-				rs, err = ruleset.NewRulesetFromURL(s.Name, r, c, true)
-			} else {
-				rs, err = ruleset.NewRulesetFromFileB64(s.Name, ensureAbsPath(dataPath, r))
-			}
-		} else {
-			if strings.HasPrefix(s.Ruleset, "https") {
-				rs, err = ruleset.NewRulesetFromURL(s.Name, s.Ruleset, c, false)
-			} else {
-				rs, err = ruleset.NewRulesetFromFile(s.Name, ensureAbsPath(dataPath, s.Ruleset))
-			}
-		}
+		rs, err := ruleset.Parse(c, s.Name, s.Ruleset, dataPath)
 		if err != nil {
 			return nil, err
 		}
@@ -214,14 +201,4 @@ func getGeoip2Path(hc *http.Client, dataPath, geoip2Path string) string {
 	defer mmdb.Close()
 	io.Copy(mmdb, resp.Body)
 	return mmdbPath
-}
-
-func ensureAbsPath(datapath, filename string) string {
-	if filename == "" {
-		return ""
-	}
-	if filepath.IsAbs(filename) {
-		return filename
-	}
-	return filepath.Join(datapath, filename)
 }

@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 )
 
 type Ruleset struct {
+	client           spec.TohClient
 	proxy            string
 	directCountrySet []string
 	proxyCountrySet  []string
@@ -27,22 +29,68 @@ type Ruleset struct {
 	wildcardSet      []string
 }
 
-func NewRulesetFromReader(name string, reader io.ReadCloser, b64 bool) (*Ruleset, error) {
-	rs := Ruleset{proxy: name, specialSet: []string{}, directSet: []string{}, wildcardSet: []string{}}
-	defer reader.Close()
-	var r *bufio.Reader
-	if b64 {
-		r = bufio.NewReader(base64.NewDecoder(base64.RawStdEncoding, reader))
-	} else {
-		r = bufio.NewReader(reader)
+func Parse(client spec.TohClient, name string, ruleset []string, datapath string) (rs *Ruleset, err error) {
+	rs = &Ruleset{proxy: name, client: client}
+	for _, ruleLocation := range ruleset {
+		var reader io.Reader
+		var readCloser io.ReadCloser
+		if r, ok := strings.CutPrefix(ruleLocation, "b64,"); ok {
+			if strings.HasPrefix(r, "https") {
+				readCloser, err = rs.download(r, name)
+			} else {
+				readCloser, err = rs.openFile(ensureAbsPath(datapath, r))
+			}
+			if err != nil {
+				return
+			}
+			reader = base64.NewDecoder(base64.RawStdEncoding, readCloser)
+		} else {
+			if strings.HasPrefix(r, "https") {
+				readCloser, err = rs.download(r, name)
+				reader = readCloser
+			} else {
+				readCloser, err = rs.openFile(ensureAbsPath(datapath, r))
+				reader = readCloser
+			}
+			if err != nil {
+				return
+			}
+		}
+		err = rs.LoadFromReader(*bufio.NewReader(reader))
+		if err != nil {
+			readCloser.Close()
+			return
+		}
+		readCloser.Close()
 	}
+	return
+}
+
+func (rs *Ruleset) download(ruleLocation, proxy string) (reader io.ReadCloser, err error) {
+	logrus.Infof("downloading %s ruleset %s", proxy, ruleLocation)
+	reader, err = readerFromURL(rs.client, ruleLocation)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (rs *Ruleset) openFile(ruleLocation string) (reader io.ReadCloser, err error) {
+	reader, err = os.Open(ruleLocation)
+	if err != nil {
+		return
+	}
+	return
+}
+
+func (rs *Ruleset) LoadFromReader(reader bufio.Reader) error {
 	for {
-		l, err := r.ReadString('\n')
+		l, err := reader.ReadString('\n')
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if len(l) == 0 || len(strings.Trim(l, "\n")) == 0 {
 			continue
@@ -75,56 +123,14 @@ func NewRulesetFromReader(name string, reader io.ReadCloser, b64 bool) (*Ruleset
 		rs.wildcardSet = append(rs.wildcardSet, trim(l))
 	}
 	logrus.Infof("ruleset %s domain: special %d, direct %d, wildcard %d",
-		name, len(rs.specialSet), len(rs.directSet), len(rs.wildcardSet))
+		rs.proxy, len(rs.specialSet), len(rs.directSet), len(rs.wildcardSet))
 	if len(rs.directCountrySet) > 0 {
-		logrus.Infof("ruleset %s if-ip: direct %s", name, rs.directCountrySet)
+		logrus.Infof("ruleset %s if-ip: direct %s", rs.proxy, rs.directCountrySet)
 
 	} else if len(rs.proxyCountrySet) > 0 {
-		logrus.Infof("ruleset %s if-ip: proxy %s", name, rs.proxyCountrySet)
+		logrus.Infof("ruleset %s if-ip: proxy %s", rs.proxy, rs.proxyCountrySet)
 	}
-	return &rs, nil
-}
-
-func NewRulesetFromFileB64(name, filename string) (*Ruleset, error) {
-	f, err := os.Open(filename)
-	if err != nil {
-		return nil, err
-	}
-	return NewRulesetFromReader(name, f, true)
-}
-
-func NewRulesetFromFile(name, filename string) (*Ruleset, error) {
-	f, err := os.Open(filename)
-	if err != nil {
-		return nil, err
-	}
-	return NewRulesetFromReader(name, f, false)
-}
-
-func NewRulesetFromURL(name, url string, client spec.TohClient, b64 bool) (*Ruleset, error) {
-	logrus.Infof("downloading %s for %s ruleset", url, name)
-	resp, err := (&http.Client{
-		Timeout: 15 * time.Second,
-		Transport: &http.Transport{
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				ipAddr, err := spec.ResolveIP(ctx, client.DialTCP, addr)
-				if err != nil {
-					if strings.Contains(err.Error(), spec.ErrAuth.Error()) {
-						return nil, errors.New("proxy failed, invalid Toh Key")
-					}
-					return nil, err
-				}
-				return client.DialTCP(ctx, ipAddr)
-			},
-		},
-	}).Get(url)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%s %s", url, resp.Status)
-	}
-	return NewRulesetFromReader(name, resp.Body, b64)
+	return nil
 }
 
 func (rs *Ruleset) SpecialMatch(host string) bool {
@@ -159,6 +165,41 @@ func (rs *Ruleset) CountryMatch(country string) bool {
 	return slices.Contains(rs.proxyCountrySet, country)
 }
 
+func readerFromURL(client spec.TohClient, url string) (io.ReadCloser, error) {
+	resp, err := (&http.Client{
+		Timeout: 15 * time.Second,
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				ipAddr, err := spec.ResolveIP(ctx, client.DialTCP, addr)
+				if err != nil {
+					if strings.Contains(err.Error(), spec.ErrAuth.Error()) {
+						return nil, errors.New("proxy failed, invalid Toh Key")
+					}
+					return nil, err
+				}
+				return client.DialTCP(ctx, ipAddr)
+			},
+		},
+	}).Get(url)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("%s %s", url, resp.Status)
+	}
+	return resp.Body, nil
+}
+
 func trim(s string) string {
 	return strings.Trim(strings.Trim(s, "\n"), " ")
+}
+
+func ensureAbsPath(datapath, filename string) string {
+	if filename == "" {
+		return ""
+	}
+	if filepath.IsAbs(filename) {
+		return filename
+	}
+	return filepath.Join(datapath, filename)
 }

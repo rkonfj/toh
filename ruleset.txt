@@ -9,6 +9,7 @@
 .gstatic.com
 .youtube.com
 .ytimg.com
+.ggpht.com
 
 ! OpenAI
 .openai.com
