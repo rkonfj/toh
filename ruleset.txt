@@ -22,3 +22,13 @@
 ! WiKi
 .wikipedia.org
 .wikimedia.org
+
+! Reddit
+.reddit.com
+.redditstatic.com
+.redditmedia.com
+.redd.it
+
+! MISC
+.termux.com
+.medium.com

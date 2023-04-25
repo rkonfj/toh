@@ -149,7 +149,7 @@ func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (tcpConn, u
 			logrus.Debug("handle command error @UDP ", err)
 			return
 		}
-		udpConn, err = net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4(0, 0, 0, 0), Port: 0})
+		udpConn, err = net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(0, 0, 0, 0), Port: 0})
 		if err != nil {
 			logrus.Debug("handle command error @UDP listener")
 			return
