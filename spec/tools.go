@@ -55,7 +55,7 @@ func ResolveIP(ctx context.Context, dial Dial, addr string) (a string, err error
 		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
 			return dial(ctx, "8.8.8.8:53")
 		},
-	}).LookupIP(dnsLookupCtx, "ip", host)
+	}).LookupIP(dnsLookupCtx, "ip4", host)
 	if err != nil {
 		return
 	}
