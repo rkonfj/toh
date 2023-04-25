@@ -21,6 +21,9 @@ func init() {
 		RunE:    startAction,
 	}
 	Cmd.Flags().StringP("config", "c", "", "socks5 server config file (default is $HOME/.config/toh/socks5.yml)")
+	Cmd.Flags().String("dns", "", "dns to use (enable local dns when not empty)")
+	Cmd.Flags().String("dns-listen", "0.0.0.0:2053", "local dns")
+	Cmd.Flags().String("dns-proxy", "", "leave blank to randomly choose one from the config server section")
 }
 
 func initAction(cmd *cobra.Command, args []string) error {
@@ -38,42 +41,65 @@ func initAction(cmd *cobra.Command, args []string) error {
 }
 
 func startAction(cmd *cobra.Command, args []string) error {
-	opts, dataPath, err := processOptions(cmd)
+	opts, err := processOptions(cmd)
 	if err != nil {
 		return err
 	}
-	sm, err := NewSocks5Server(dataPath, opts)
+	go startDomainNameServer(opts.dns, opts.dnsListen, opts.dnsProxy, opts.cfg)
+	sm, err := NewSocks5Server(opts.datapath, opts.cfg)
 	if err != nil {
 		return err
 	}
 	return sm.Run()
 }
 
-func processOptions(cmd *cobra.Command) (opts *Options, dataPath string, err error) {
+type Options struct {
+	cfg       Config
+	datapath  string
+	dns       string
+	dnsListen string
+	dnsProxy  string
+}
+
+func processOptions(cmd *cobra.Command) (opts Options, err error) {
+	opts.dns, err = cmd.Flags().GetString("dns")
+	if err != nil {
+		return
+	}
+	opts.dnsListen, err = cmd.Flags().GetString("dns-listen")
+	if err != nil {
+		return
+	}
+
+	opts.dnsProxy, err = cmd.Flags().GetString("dns-proxy")
+	if err != nil {
+		return
+	}
+
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return
 	}
 	defer func() {
-		dataPath = filepath.Join(homeDir, ".config", "toh")
+		opts.datapath = filepath.Join(homeDir, ".config", "toh")
 	}()
 	configPath, err := cmd.Flags().GetString("config")
 	if err != nil {
 		return
 	}
-	var optsF *os.File
+	var configF *os.File
 	if configPath != "" {
-		optsF, err = os.Open(configPath)
+		configF, err = os.Open(configPath)
 		if err != nil {
 			return
 		}
-		opts = &Options{}
-		err = yaml.NewDecoder(optsF).Decode(opts)
+		opts.cfg = Config{}
+		err = yaml.NewDecoder(configF).Decode(&opts.cfg)
 		return
 	}
 
 	configPath = filepath.Join(homeDir, ".config", "toh", "socks5.yml")
-	optsF, err = os.Open(configPath)
+	configF, err = os.Open(configPath)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return
@@ -83,23 +109,23 @@ func processOptions(cmd *cobra.Command) (opts *Options, dataPath string, err err
 		if err != nil {
 			return
 		}
-		optsF, err = os.OpenFile(configPath, os.O_CREATE|os.O_WRONLY, 0644)
+		configF, err = os.OpenFile(configPath, os.O_CREATE|os.O_WRONLY, 0644)
 		if err != nil {
 			return
 		}
-		opts = defaultOptions()
-		enc := yaml.NewEncoder(spec.NewConfigWriter(optsF))
+		opts.cfg = *defaultOptions()
+		enc := yaml.NewEncoder(spec.NewConfigWriter(configF))
 		enc.SetIndent(2)
-		err = enc.Encode(opts)
+		err = enc.Encode(opts.cfg)
 		return
 	}
-	opts = &Options{}
-	err = yaml.NewDecoder(optsF).Decode(opts)
+	opts.cfg = Config{}
+	err = yaml.NewDecoder(configF).Decode(&opts.cfg)
 	return
 }
 
-func defaultOptions() *Options {
-	return &Options{
+func defaultOptions() *Config {
+	return &Config{
 		Geoip2: "country.mmdb",
 		Listen: "0.0.0.0:2080",
 		Servers: []TohServer{{

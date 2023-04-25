@@ -20,7 +20,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type Options struct {
+type Config struct {
 	Geoip2  string      `yaml:"geoip2"`
 	Listen  string      `yaml:"listen"`
 	Servers []TohServer `yaml:"servers"`
@@ -34,7 +34,7 @@ type TohServer struct {
 }
 
 type RulebasedSocks5Server struct {
-	opts          Options
+	cfg           Config
 	servers       []*ToH
 	defaultDialer net.Dialer
 	geoip2db      *geoip2.Reader
@@ -46,9 +46,9 @@ type ToH struct {
 	ruleset *ruleset.Ruleset
 }
 
-func NewSocks5Server(dataPath string, opts *Options) (*RulebasedSocks5Server, error) {
+func NewSocks5Server(dataPath string, cfg Config) (*RulebasedSocks5Server, error) {
 	var servers []*ToH
-	for _, s := range opts.Servers {
+	for _, s := range cfg.Servers {
 		c, err := client.NewTohClient(client.Options{
 			ServerAddr: s.Api,
 			ApiKey:     s.Key,
@@ -69,12 +69,12 @@ func NewSocks5Server(dataPath string, opts *Options) (*RulebasedSocks5Server, er
 		servers = append(servers, server)
 	}
 	httpClient := securityHttpClient(servers)
-	db, err := openGeoip2(httpClient, dataPath, opts.Geoip2)
+	db, err := openGeoip2(httpClient, dataPath, cfg.Geoip2)
 	if err != nil {
 		return nil, err
 	}
 	return &RulebasedSocks5Server{
-		opts:          *opts,
+		cfg:           cfg,
 		servers:       servers,
 		defaultDialer: net.Dialer{},
 		geoip2db:      db,
@@ -83,7 +83,7 @@ func NewSocks5Server(dataPath string, opts *Options) (*RulebasedSocks5Server, er
 
 func (s *RulebasedSocks5Server) Run() error {
 	ss := socks5.NewSocks5Server(socks5.Options{
-		Listen:    s.opts.Listen,
+		Listen:    s.cfg.Listen,
 		TCPDialer: s.dialTCP,
 		UDPDialer: s.dialUDP,
 	})
