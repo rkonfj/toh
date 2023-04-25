@@ -40,8 +40,8 @@ func (s *Socks5Server) Run() error {
 			return err
 		}
 		go func() {
-			buf := make([]byte, 1024)
-			tcpConn, udpConn := s.handshake(conn, buf)
+			ctx := context.WithValue(context.Background(), spec.AppAddr, conn.RemoteAddr().String())
+			tcpConn, udpConn := s.handshake(ctx, conn)
 			if udpConn == nil {
 				s.pipe(conn, tcpConn)
 				return
@@ -51,7 +51,8 @@ func (s *Socks5Server) Run() error {
 	}
 }
 
-func (s *Socks5Server) handshake(conn net.Conn, buf []byte) (tcpConn, udpConn net.Conn) {
+func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (tcpConn, udpConn net.Conn) {
+	buf := make([]byte, 1024)
 	defer func() {
 		if tcpConn == nil {
 			conn.Close()
@@ -125,7 +126,7 @@ func (s *Socks5Server) handshake(conn net.Conn, buf []byte) (tcpConn, udpConn ne
 	switch cmd {
 	// 1. CONNECT
 	case 1:
-		tcpConn, err = s.opts.TCPDialer(context.Background(), fmt.Sprintf("%s:%d", addr, port))
+		tcpConn, err = s.opts.TCPDialer(ctx, fmt.Sprintf("%s:%d", addr, port))
 		if err != nil {
 			logrus.Debug("handle command error @CONNECT ", err)
 			return
@@ -143,7 +144,7 @@ func (s *Socks5Server) handshake(conn net.Conn, buf []byte) (tcpConn, udpConn ne
 		return
 	// 2. UDP ASSOCIATE
 	case 3:
-		tcpConn, err = s.opts.UDPDialer(context.Background(), fmt.Sprintf("%s:%d", addr, port))
+		tcpConn, err = s.opts.UDPDialer(ctx, fmt.Sprintf("%s:%d", addr, port))
 		if err != nil {
 			logrus.Debug("handle command error @UDP ", err)
 			return

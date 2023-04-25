@@ -118,7 +118,7 @@ func (s *RulebasedSocks5Server) dialTCP(ctx context.Context, addr string) (net.C
 
 		for _, toh := range s.servers {
 			if toh.ruleset.CountryMatch(c.Country.IsoCode) {
-				logrus.Infof("%s using %s", addr, toh.name)
+				logrus.WithField(spec.AppAddr.String(), ctx.Value(spec.AppAddr)).Infof("%s using %s", addr, toh.name)
 				return toh.client.DialTCP(ctx, addr)
 			}
 		}
@@ -127,20 +127,20 @@ func (s *RulebasedSocks5Server) dialTCP(ctx context.Context, addr string) (net.C
 
 	for _, toh := range s.servers {
 		if toh.ruleset.SpecialMatch(host) {
-			logrus.Infof("%s using %s", addr, toh.name)
+			logrus.WithField(spec.AppAddr.String(), ctx.Value(spec.AppAddr)).Infof("%s using %s", addr, toh.name)
 			return toh.client.DialTCP(ctx, addr)
 		}
 	}
 
 	for _, toh := range s.servers {
 		if toh.ruleset.WildcardMatch(host) {
-			logrus.Infof("%s using %s", addr, toh.name)
+			logrus.WithField(spec.AppAddr.String(), ctx.Value(spec.AppAddr)).Infof("%s using %s", addr, toh.name)
 			return toh.client.DialTCP(ctx, addr)
 		}
 	}
 
 direct:
-	logrus.Infof("%s using direct", addr)
+	logrus.WithField(spec.AppAddr.String(), ctx.Value(spec.AppAddr)).Infof("%s using direct", addr)
 	return s.defaultDialer.DialContext(ctx, "tcp", addr)
 }
 

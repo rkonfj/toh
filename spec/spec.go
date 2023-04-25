@@ -2,19 +2,11 @@ package spec
 
 import (
 	"context"
-	"errors"
 	"io"
 	"net"
 	"strings"
 	"time"
 )
-
-var (
-	ErrAuth = errors.New("unauthorized, invalid ToH key")
-)
-
-// Dial describe the dial func
-type Dial func(ctx context.Context, addr string) (net.Conn, error)
 
 // TohClient the toh client
 type TohClient interface {
