@@ -137,7 +137,7 @@ direct:
 }
 
 func (s *RulebasedSocks5Server) dialUDP(ctx context.Context, addr string) (net.Conn, error) {
-	return s.servers[rand.Intn(len(s.servers))].client.DialUDP(ctx, addr)
+	return selectServer(s.servers).client.DialUDP(ctx, addr)
 }
 
 func selectServer(servers []*ToH) *ToH {
@@ -189,13 +189,13 @@ func getGeoip2Path(hc *http.Client, dataPath, geoip2Path string) string {
 	mmdbPath := filepath.Join(dataPath, "country.mmdb")
 	resp, err := hc.Get("https://github.com/Dreamacro/maxmind-geoip/releases/latest/download/Country.mmdb")
 	if err != nil {
-		logrus.Error("download geoip2 country.mmdb ", err)
+		logrus.Error("download error: ", err)
 		return mmdbPath
 	}
 	defer resp.Body.Close()
 	mmdb, err := os.OpenFile(mmdbPath, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		logrus.Errorf("open %s %s", mmdbPath, err)
+		logrus.Errorf("open db %s error: %s", mmdbPath, err)
 		return mmdbPath
 	}
 	defer mmdb.Close()
