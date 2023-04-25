@@ -116,12 +116,17 @@ func (s *RulebasedSocks5Server) dialTCP(ctx context.Context, addr string) (net.C
 			return nil, err
 		}
 
+		if len(c.Country.IsoCode) == 0 {
+			goto direct
+		}
+
 		for _, toh := range s.servers {
 			if toh.ruleset.CountryMatch(c.Country.IsoCode) {
 				logrus.WithField(spec.AppAddr.String(), ctx.Value(spec.AppAddr)).Infof("%s using %s", addr, toh.name)
 				return toh.client.DialTCP(ctx, addr)
 			}
 		}
+
 		goto direct
 	}
 
