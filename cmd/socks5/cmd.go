@@ -103,11 +103,10 @@ func defaultOptions() *Options {
 		Geoip2: "country.mmdb",
 		Listen: "0.0.0.0:2080",
 		Servers: []TohServer{{
-			Name:          "us1",
-			DirectCountry: []string{"CN"},
-			Api:           "wss://us-l4-vultr.synf.in/ws",
-			Key:           "5868a941-3025-4c6d-ad3a-41e29bb42e5f",
-			Ruleset:       "https://file.synf.in/toh/rules/default.txt",
+			Name:    "us1",
+			Api:     "wss://us-l4-vultr.synf.in/ws",
+			Key:     "5868a941-3025-4c6d-ad3a-41e29bb42e5f",
+			Ruleset: "https://file.synf.in/toh/rules/default.txt",
 		}},
 	}
 }

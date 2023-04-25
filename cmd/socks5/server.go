@@ -16,7 +16,6 @@ import (
 	"github.com/rkonfj/toh/cmd/socks5/ruleset"
 	"github.com/rkonfj/toh/socks5"
 	"github.com/sirupsen/logrus"
-	"golang.org/x/exp/slices"
 )
 
 type Options struct {
@@ -26,11 +25,10 @@ type Options struct {
 }
 
 type TohServer struct {
-	Name          string   `yaml:"name"`
-	Api           string   `yaml:"api"`
-	Key           string   `yaml:"key"`
-	Ruleset       string   `yaml:"ruleset"`
-	DirectCountry []string `yaml:"countryCode"`
+	Name    string `yaml:"name"`
+	Api     string `yaml:"api"`
+	Key     string `yaml:"key"`
+	Ruleset string `yaml:"ruleset"`
 }
 
 type RulebasedSocks5Server struct {
@@ -42,7 +40,6 @@ type RulebasedSocks5Server struct {
 
 type ToH struct {
 	name    string
-	dc      []string
 	client  *client.TohClient
 	ruleset *ruleset.Ruleset
 }
@@ -70,7 +67,6 @@ func NewSocks5Server(dataPath string, opts *Options) (*RulebasedSocks5Server, er
 		server := &ToH{
 			name:    s.Name,
 			client:  c,
-			dc:      s.DirectCountry,
 			ruleset: rs,
 		}
 		servers = append(servers, server)
@@ -109,10 +105,14 @@ func (s *RulebasedSocks5Server) dialTCP(ctx context.Context, addr string) (net.C
 		if err != nil {
 			return nil, err
 		}
-		if server := s.selectServerByDirectCountry(c.Country.IsoCode); server != nil {
-			logrus.Infof("%s using %s", addr, server.name)
-			return server.client.DialTCP(ctx, addr)
+
+		for _, toh := range s.servers {
+			if toh.ruleset.CountryMatch(c.Country.IsoCode) {
+				logrus.Infof("%s using %s", addr, toh.name)
+				return toh.client.DialTCP(ctx, addr)
+			}
 		}
+		goto direct
 	}
 
 	for _, toh := range s.servers {
@@ -129,25 +129,13 @@ func (s *RulebasedSocks5Server) dialTCP(ctx context.Context, addr string) (net.C
 		}
 	}
 
+direct:
 	logrus.Infof("%s using direct", addr)
 	return s.defaultDialer.DialContext(ctx, "tcp", addr)
 }
 
 func (s *RulebasedSocks5Server) dialUDP(ctx context.Context, addr string) (net.Conn, error) {
 	return s.servers[rand.Intn(len(s.servers))].client.DialUDP(ctx, addr)
-}
-
-func (s *RulebasedSocks5Server) selectServerByDirectCountry(c string) *ToH {
-	var suitableServers []*ToH
-	for _, s := range s.servers {
-		if !slices.Contains(s.dc, c) {
-			suitableServers = append(suitableServers, s)
-		}
-	}
-	if len(suitableServers) == 0 {
-		return nil
-	}
-	return selectServer(suitableServers)
 }
 
 func selectServer(servers []*ToH) *ToH {
