@@ -16,6 +16,7 @@ import (
 	"github.com/rkonfj/toh/client"
 	"github.com/rkonfj/toh/cmd/socks5/ruleset"
 	"github.com/rkonfj/toh/socks5"
+	"github.com/rkonfj/toh/spec"
 	"github.com/sirupsen/logrus"
 )
 
@@ -156,7 +157,12 @@ func securityHttpClient(servers []*ToH) *http.Client {
 		Timeout: 30 * time.Second,
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				return selectServer(servers).client.DialTCP(ctx, addr)
+				server := selectServer(servers)
+				addr, err := spec.ResolveIP(ctx, server.client.DialTCP, addr)
+				if err != nil {
+					return nil, err
+				}
+				return server.client.DialTCP(ctx, addr)
 			},
 		},
 	}
