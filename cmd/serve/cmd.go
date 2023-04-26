@@ -10,7 +10,7 @@ var Cmd *cobra.Command
 
 func init() {
 	Cmd = &cobra.Command{
-		Use:     "server",
+		Use:     "serve",
 		Short:   "Server daemon",
 		Args:    cobra.NoArgs,
 		PreRunE: initAction,

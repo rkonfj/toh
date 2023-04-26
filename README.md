@@ -16,7 +16,7 @@
 
 - Run
 ```
-# ./toh server --help
+# ./toh serve --help
 Server daemon
 
 Usage:
@@ -27,7 +27,7 @@ Flags:
   -h, --help               help for toh
   -l, --listen string      http server listen address (ip:port) (default "0.0.0.0:9986")
       --log-level string   logrus logger level (default "info")
-# ./toh server
+# ./toh serve
 INFO[2023-04-24T19:35:12+08:00] initializing ack file acl.json               
 {
     "keys": [
