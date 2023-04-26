@@ -148,7 +148,7 @@ func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (dialerName
 	case 1:
 		dialerName, netConn, err = s.opts.TCPDialContext(ctx, remoteAddr)
 		if err != nil {
-			log.Errorf("establishing tcp://%s error: %s", remoteAddr, err)
+			log.Errorf("socks5 establishing tcp://%s error: %s", remoteAddr, err)
 			respHostUnreachable(conn)
 			return
 		}
@@ -167,7 +167,7 @@ func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (dialerName
 	case 3:
 		dialerName, netConn, err = s.opts.UDPDialContext(ctx, remoteAddr)
 		if err != nil {
-			log.Errorf("establishing udp://%s error: %s", remoteAddr, err)
+			log.Errorf("socks5 establishing udp://%s error: %s", remoteAddr, err)
 			respHostUnreachable(conn)
 			return
 		}
