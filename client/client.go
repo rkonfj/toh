@@ -67,7 +67,7 @@ func (c *TohClient) dial(ctx context.Context, network, addr string) (conn *webso
 		return
 	}
 
-	dnsLookupCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	dnsLookupCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
 	ips, err := net.DefaultResolver.LookupIP(dnsLookupCtx, "ip", host)

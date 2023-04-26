@@ -47,22 +47,19 @@ func (s *Socks5Server) Run() error {
 		go func() {
 			ctx := context.WithValue(context.Background(), spec.AppAddr, conn.RemoteAddr().String())
 			dialerName, remoteAddr, netConn, udpConn := s.handshake(ctx, conn)
+			var c1, c2 net.Conn
+			var network string
 			if udpConn == nil {
-				lbc, rbc := s.pipe(conn, netConn)
-				s.trafficEventChan <- &TrafficEvent{
-					DialerName: dialerName,
-					Network:    "tcp",
-					LocalAddr:  conn.RemoteAddr().String(),
-					RemoteAddr: remoteAddr,
-					In:         lbc,
-					Out:        rbc,
-				}
-				return
+				c1, c2 = conn, netConn
+				network = "tcp"
+			} else {
+				c1, c2 = udpConn, netConn
+				network = "udp"
 			}
-			lbc, rbc := s.pipe(netConn, udpConn)
+			lbc, rbc := s.pipe(c1, c2)
 			s.trafficEventChan <- &TrafficEvent{
 				DialerName: dialerName,
-				Network:    "udp",
+				Network:    network,
 				LocalAddr:  conn.RemoteAddr().String(),
 				RemoteAddr: remoteAddr,
 				In:         lbc,

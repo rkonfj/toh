@@ -10,6 +10,7 @@ func logTrafficEvent(e *socks5.TrafficEvent) {
 		return
 	}
 	logrus.WithField("stats_toh", e.DialerName).
+		WithField("stats_net", e.Network).
 		WithField("stats_in_bytes", e.In).
 		WithField("stats_out_bytes", e.Out).
 		WithField("stats_in", e.LocalAddr).
