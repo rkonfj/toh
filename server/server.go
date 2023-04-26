@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"sync"
 
 	"github.com/rkonfj/toh/spec"
 	"github.com/sirupsen/logrus"
@@ -12,8 +13,9 @@ import (
 )
 
 type TohServer struct {
-	options Options
-	acl     *ACL
+	options          Options
+	acl              *ACL
+	trafficEventChan chan *TrafficEvent
 }
 
 type Options struct {
@@ -27,57 +29,74 @@ func NewTohServer(options Options) (*TohServer, error) {
 		return nil, err
 	}
 	return &TohServer{
-		options: options,
-		acl:     acl,
+		options:          options,
+		acl:              acl,
+		trafficEventChan: make(chan *TrafficEvent, 4096),
 	}, nil
 }
 
 func (s *TohServer) Run() {
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		apiKey := r.Header.Get("x-toh-key")
-		network := r.Header.Get("x-toh-net")
-		addr := r.Header.Get("x-toh-addr")
-
-		if !s.acl.Check(apiKey) {
-			w.WriteHeader(http.StatusUnauthorized)
-			w.Write([]byte("401 Unauthorized"))
-			logrus.Infof("%s -> %s://%s auth failed", spec.RealIP(r), network, addr)
-			return
-		}
-
-		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{})
-		if err != nil {
-			logrus.Errorf("%v", err)
-			return
-		}
-
-		dialer := net.Dialer{}
-		netConn, err := dialer.DialContext(context.Background(), network, addr)
-		if err != nil {
-			conn.Close(websocket.StatusBadGateway, "remote error")
-			logrus.Infof("%s -> %s://%s dial error %v", spec.RealIP(r), network, addr, err)
-			return
-		}
-		go s.pipe(conn, netConn)
-	})
-
-	logrus.Infof("server listen %s now", s.options.Listen)
+	http.HandleFunc("/", s.upgradeWebSocket)
+	s.startTrafficEventConsumeDaemon()
+	logrus.Infof("server listen on %s now", s.options.Listen)
 	err := http.ListenAndServe(s.options.Listen, nil)
 	if err != nil {
 		logrus.Error(err)
 	}
 }
 
-func (s *TohServer) pipe(wsConn *websocket.Conn, netConn net.Conn) {
-	if wsConn == nil || netConn == nil {
+func (s TohServer) upgradeWebSocket(w http.ResponseWriter, r *http.Request) {
+	apiKey := r.Header.Get("x-toh-key")
+	network := r.Header.Get("x-toh-net")
+	addr := r.Header.Get("x-toh-addr")
+	clientIP := spec.RealIP(r)
+
+	if !s.acl.Check(apiKey) {
+		w.WriteHeader(http.StatusUnauthorized)
+		w.Write([]byte("401 Unauthorized"))
+		logrus.Infof("%s -> %s://%s auth failed", clientIP, network, addr)
+		return
+	}
+
+	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{})
+	if err != nil {
+		logrus.Errorf("%v", err)
+		return
+	}
+	dialer := net.Dialer{}
+	netConn, err := dialer.DialContext(context.Background(), network, addr)
+	if err != nil {
+		conn.Close(websocket.StatusBadGateway, "remote error")
+		logrus.Infof("%s -> %s://%s dial error %v", clientIP, network, addr, err)
 		return
 	}
 	go func() {
-		io.Copy(netConn, RWWS(wsConn))
+		lbc, rbc := s.pipe(conn, netConn)
+		s.trafficEventChan <- &TrafficEvent{
+			In:         lbc,
+			Out:        rbc,
+			Key:        apiKey,
+			ClientIP:   clientIP,
+			RemoteAddr: addr,
+		}
+	}()
+}
+
+func (s *TohServer) pipe(wsConn *websocket.Conn, netConn net.Conn) (lbc, rbc int64) {
+	if wsConn == nil || netConn == nil {
+		return
+	}
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		lbc, _ = io.Copy(netConn, RWWS(wsConn))
 		logrus.Debugf("ws conn closed, close remote conn(%s) now", netConn.RemoteAddr().String())
 		netConn.Close()
 	}()
-	io.Copy(RWWS(wsConn), netConn)
+	rbc, _ = io.Copy(RWWS(wsConn), netConn)
 	logrus.Debugf("remote conn(%s) closed, close ws conn now", netConn.RemoteAddr().String())
 	wsConn.Close(websocket.StatusBadGateway, "remote close")
+	wg.Wait()
+	return
 }

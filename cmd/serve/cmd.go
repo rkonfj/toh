@@ -30,7 +30,7 @@ func initAction(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	logrus.SetLevel(ll)
-	logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
+	logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true, DisableColors: true})
 	return nil
 }
 
