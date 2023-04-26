@@ -1,9 +1,10 @@
-package socks5_cmd
+package socks5cmd
 
 import (
 	"os"
 	"path/filepath"
 
+	"github.com/rkonfj/toh/cmd/socks5/server"
 	"github.com/rkonfj/toh/spec"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -36,7 +37,7 @@ func initAction(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	logrus.SetLevel(ll)
-	logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
+	logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true, DisableColors: true})
 	return nil
 }
 
@@ -45,8 +46,8 @@ func startAction(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	go startDomainNameServer(opts.dns, opts.dnsListen, opts.dnsProxy, opts.cfg)
-	sm, err := NewSocks5Server(opts.datapath, opts.cfg)
+	go server.StartDomainNameServer(opts.dns, opts.dnsListen, opts.dnsProxy, opts.cfg)
+	sm, err := server.NewSocks5Server(opts.datapath, opts.cfg)
 	if err != nil {
 		return err
 	}
@@ -54,7 +55,7 @@ func startAction(cmd *cobra.Command, args []string) error {
 }
 
 type Options struct {
-	cfg       Config
+	cfg       server.Config
 	datapath  string
 	dns       string
 	dnsListen string
@@ -93,7 +94,7 @@ func processOptions(cmd *cobra.Command) (opts Options, err error) {
 		if err != nil {
 			return
 		}
-		opts.cfg = Config{}
+		opts.cfg = server.Config{}
 		err = yaml.NewDecoder(configF).Decode(&opts.cfg)
 		return
 	}
@@ -119,16 +120,16 @@ func processOptions(cmd *cobra.Command) (opts Options, err error) {
 		err = enc.Encode(opts.cfg)
 		return
 	}
-	opts.cfg = Config{}
+	opts.cfg = server.Config{}
 	err = yaml.NewDecoder(configF).Decode(&opts.cfg)
 	return
 }
 
-func defaultOptions() *Config {
-	return &Config{
+func defaultOptions() *server.Config {
+	return &server.Config{
 		Geoip2: "country.mmdb",
 		Listen: "0.0.0.0:2080",
-		Servers: []TohServer{{
+		Servers: []server.TohServer{{
 			Name:    "us1",
 			Api:     "wss://us-l4-vultr.synf.in/ws",
 			Key:     "5868a941-3025-4c6d-ad3a-41e29bb42e5f",

@@ -1,4 +1,4 @@
-package socks5_cmd
+package server
 
 import (
 	"fmt"
@@ -9,7 +9,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func startDomainNameServer(dns, listen, proxy string, cfg Config) {
+func StartDomainNameServer(dns, listen, proxy string, cfg Config) {
 	if len(dns) == 0 {
 		return
 	}

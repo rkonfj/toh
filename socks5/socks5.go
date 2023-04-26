@@ -6,24 +6,28 @@ import (
 	"io"
 	"net"
 	"net/netip"
+	"sync"
 
 	"github.com/rkonfj/toh/spec"
 	"github.com/sirupsen/logrus"
 )
 
 type Options struct {
-	Listen    string
-	TCPDialer func(ctx context.Context, addr string) (net.Conn, error)
-	UDPDialer func(ctx context.Context, addr string) (net.Conn, error)
+	Listen               string
+	TCPDialContext       func(ctx context.Context, addr string) (dialerName string, conn net.Conn, err error)
+	UDPDialContext       func(ctx context.Context, addr string) (dialerName string, conn net.Conn, err error)
+	TrafficEventConsumer func(e *TrafficEvent)
 }
 
 type Socks5Server struct {
-	opts Options
+	opts             Options
+	trafficEventChan chan *TrafficEvent
 }
 
 func NewSocks5Server(opts Options) *Socks5Server {
 	return &Socks5Server{
-		opts: opts,
+		opts:             opts,
+		trafficEventChan: make(chan *TrafficEvent, 4096),
 	}
 }
 
@@ -32,6 +36,7 @@ func (s *Socks5Server) Run() error {
 	if err != nil {
 		return err
 	}
+	go s.startTrafficEventConsumeDaemon()
 	logrus.Infof("listen on %s for socks5 now", s.opts.Listen)
 	defer l.Close()
 	for {
@@ -41,17 +46,33 @@ func (s *Socks5Server) Run() error {
 		}
 		go func() {
 			ctx := context.WithValue(context.Background(), spec.AppAddr, conn.RemoteAddr().String())
-			tcpConn, udpConn := s.handshake(ctx, conn)
+			dialerName, remoteAddr, netConn, udpConn := s.handshake(ctx, conn)
 			if udpConn == nil {
-				s.pipe(conn, tcpConn)
+				lbc, rbc := s.pipe(conn, netConn)
+				s.trafficEventChan <- &TrafficEvent{
+					DialerName: dialerName,
+					Network:    "tcp",
+					LocalAddr:  conn.RemoteAddr().String(),
+					RemoteAddr: remoteAddr,
+					In:         lbc,
+					Out:        rbc,
+				}
 				return
 			}
-			s.pipe(tcpConn, udpConn)
+			lbc, rbc := s.pipe(netConn, udpConn)
+			s.trafficEventChan <- &TrafficEvent{
+				DialerName: dialerName,
+				Network:    "udp",
+				LocalAddr:  conn.RemoteAddr().String(),
+				RemoteAddr: remoteAddr,
+				In:         lbc,
+				Out:        rbc,
+			}
 		}()
 	}
 }
 
-func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (netConn, udpConn net.Conn) {
+func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (dialerName, remoteAddr string, netConn, udpConn net.Conn) {
 	log := logrus.WithField(spec.AppAddr.String(), ctx.Value(spec.AppAddr))
 	buf := make([]byte, 1024)
 	defer func() {
@@ -124,13 +145,13 @@ func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (netConn, u
 	}
 	port := spec.BytesToUint16(buf[:2])
 
-	fullAddr := fmt.Sprintf("%s:%d", addr, port)
+	remoteAddr = fmt.Sprintf("%s:%d", addr, port)
 	switch cmd {
 	// 1. CONNECT
 	case 1:
-		netConn, err = s.opts.TCPDialer(ctx, fullAddr)
+		dialerName, netConn, err = s.opts.TCPDialContext(ctx, remoteAddr)
 		if err != nil {
-			log.Errorf("establishing tcp://%s error: %s", fullAddr, err)
+			log.Errorf("establishing tcp://%s error: %s", remoteAddr, err)
 			respHostUnreachable(conn)
 			return
 		}
@@ -147,9 +168,9 @@ func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (netConn, u
 		return
 	// 2. UDP ASSOCIATE
 	case 3:
-		netConn, err = s.opts.UDPDialer(ctx, fullAddr)
+		dialerName, netConn, err = s.opts.UDPDialContext(ctx, remoteAddr)
 		if err != nil {
-			log.Errorf("establishing udp://%s error: %s", fullAddr, err)
+			log.Errorf("establishing udp://%s error: %s", remoteAddr, err)
 			respHostUnreachable(conn)
 			return
 		}
@@ -173,16 +194,21 @@ func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (netConn, u
 	return
 }
 
-func (s *Socks5Server) pipe(conn, rConn net.Conn) {
+func (s *Socks5Server) pipe(conn, rConn net.Conn) (lbc, rbc int64) {
 	if conn == nil || rConn == nil {
 		return
 	}
+	var wg sync.WaitGroup
+	wg.Add(1)
 	go func() {
-		io.Copy(conn, rConn)
+		defer wg.Done()
+		rbc, _ = io.Copy(conn, rConn)
 		conn.Close()
 	}()
-	io.Copy(rConn, conn)
+	lbc, _ = io.Copy(rConn, conn)
 	rConn.Close()
+	wg.Wait()
+	return
 }
 
 func respHostUnreachable(conn net.Conn) {

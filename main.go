@@ -3,7 +3,7 @@ package main
 import (
 	"github.com/rkonfj/toh/cmd/pf"
 	"github.com/rkonfj/toh/cmd/serve"
-	socks5_cmd "github.com/rkonfj/toh/cmd/socks5"
+	socks5cmd "github.com/rkonfj/toh/cmd/socks5"
 	"github.com/spf13/cobra"
 )
 
@@ -15,7 +15,7 @@ func main() {
 
 	cmd.AddCommand(pf.Cmd)
 	cmd.AddCommand(serve.Cmd)
-	cmd.AddCommand(socks5_cmd.Cmd)
+	cmd.AddCommand(socks5cmd.Cmd)
 
 	cmd.PersistentFlags().String("log-level", "info", "logrus logger level")
 

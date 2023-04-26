@@ -1,4 +1,4 @@
-package socks5_cmd
+package server
 
 import (
 	"context"
@@ -83,25 +83,27 @@ func NewSocks5Server(dataPath string, cfg Config) (*RulebasedSocks5Server, error
 
 func (s *RulebasedSocks5Server) Run() error {
 	ss := socks5.NewSocks5Server(socks5.Options{
-		Listen:    s.cfg.Listen,
-		TCPDialer: s.dialTCP,
-		UDPDialer: s.dialUDP,
+		Listen:               s.cfg.Listen,
+		TCPDialContext:       s.dialTCP,
+		UDPDialContext:       s.dialUDP,
+		TrafficEventConsumer: logTrafficEvent,
 	})
 	return ss.Run()
 }
 
-func (s *RulebasedSocks5Server) dialTCP(ctx context.Context, addr string) (net.Conn, error) {
+func (s *RulebasedSocks5Server) dialTCP(ctx context.Context, addr string) (dialerName string, conn net.Conn, err error) {
 	log := logrus.WithField(spec.AppAddr.String(), ctx.Value(spec.AppAddr))
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
-		return nil, err
+		return
 	}
 
 	ip := net.ParseIP(host)
 	if ip != nil {
-		c, err := s.geoip2db.Country(ip)
-		if err != nil {
-			return nil, err
+		c, _err := s.geoip2db.Country(ip)
+		if _err != nil {
+			err = _err
+			return
 		}
 
 		if len(c.Country.IsoCode) == 0 {
@@ -111,7 +113,9 @@ func (s *RulebasedSocks5Server) dialTCP(ctx context.Context, addr string) (net.C
 		for _, toh := range s.servers {
 			if toh.ruleset.CountryMatch(c.Country.IsoCode) {
 				log.Infof("%s using %s", addr, toh.name)
-				return toh.client.DialTCP(ctx, addr)
+				dialerName = toh.name
+				conn, err = toh.client.DialTCP(ctx, addr)
+				return
 			}
 		}
 
@@ -121,24 +125,33 @@ func (s *RulebasedSocks5Server) dialTCP(ctx context.Context, addr string) (net.C
 	for _, toh := range s.servers {
 		if toh.ruleset.SpecialMatch(host) {
 			log.Infof("%s using %s", addr, toh.name)
-			return toh.client.DialTCP(ctx, addr)
+			dialerName = toh.name
+			conn, err = toh.client.DialTCP(ctx, addr)
+			return
 		}
 	}
 
 	for _, toh := range s.servers {
 		if toh.ruleset.WildcardMatch(host) {
 			log.Infof("%s using %s", addr, toh.name)
-			return toh.client.DialTCP(ctx, addr)
+			dialerName = toh.name
+			conn, err = toh.client.DialTCP(ctx, addr)
+			return
 		}
 	}
 
 direct:
 	log.Infof("%s using direct", addr)
-	return s.defaultDialer.DialContext(ctx, "tcp", addr)
+	dialerName = "direct"
+	conn, err = s.defaultDialer.DialContext(ctx, "tcp", addr)
+	return
 }
 
-func (s *RulebasedSocks5Server) dialUDP(ctx context.Context, addr string) (net.Conn, error) {
-	return selectServer(s.servers).client.DialUDP(ctx, addr)
+func (s *RulebasedSocks5Server) dialUDP(ctx context.Context, addr string) (dialerName string, conn net.Conn, err error) {
+	toh := selectServer(s.servers)
+	dialerName = toh.name
+	conn, err = toh.client.DialUDP(ctx, addr)
+	return
 }
 
 func selectServer(servers []*ToH) *ToH {
