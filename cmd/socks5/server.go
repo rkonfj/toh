@@ -91,6 +91,7 @@ func (s *RulebasedSocks5Server) Run() error {
 }
 
 func (s *RulebasedSocks5Server) dialTCP(ctx context.Context, addr string) (net.Conn, error) {
+	log := logrus.WithField(spec.AppAddr.String(), ctx.Value(spec.AppAddr))
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
 		return nil, err
@@ -109,7 +110,7 @@ func (s *RulebasedSocks5Server) dialTCP(ctx context.Context, addr string) (net.C
 
 		for _, toh := range s.servers {
 			if toh.ruleset.CountryMatch(c.Country.IsoCode) {
-				logrus.WithField(spec.AppAddr.String(), ctx.Value(spec.AppAddr)).Infof("%s using %s", addr, toh.name)
+				log.Infof("%s using %s", addr, toh.name)
 				return toh.client.DialTCP(ctx, addr)
 			}
 		}
@@ -119,20 +120,20 @@ func (s *RulebasedSocks5Server) dialTCP(ctx context.Context, addr string) (net.C
 
 	for _, toh := range s.servers {
 		if toh.ruleset.SpecialMatch(host) {
-			logrus.WithField(spec.AppAddr.String(), ctx.Value(spec.AppAddr)).Infof("%s using %s", addr, toh.name)
+			log.Infof("%s using %s", addr, toh.name)
 			return toh.client.DialTCP(ctx, addr)
 		}
 	}
 
 	for _, toh := range s.servers {
 		if toh.ruleset.WildcardMatch(host) {
-			logrus.WithField(spec.AppAddr.String(), ctx.Value(spec.AppAddr)).Infof("%s using %s", addr, toh.name)
+			log.Infof("%s using %s", addr, toh.name)
 			return toh.client.DialTCP(ctx, addr)
 		}
 	}
 
 direct:
-	logrus.WithField(spec.AppAddr.String(), ctx.Value(spec.AppAddr)).Infof("%s using direct", addr)
+	log.Infof("%s using direct", addr)
 	return s.defaultDialer.DialContext(ctx, "tcp", addr)
 }
 

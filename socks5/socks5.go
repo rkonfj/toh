@@ -51,10 +51,11 @@ func (s *Socks5Server) Run() error {
 	}
 }
 
-func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (tcpConn, udpConn net.Conn) {
+func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (netConn, udpConn net.Conn) {
+	log := logrus.WithField(spec.AppAddr.String(), ctx.Value(spec.AppAddr))
 	buf := make([]byte, 1024)
 	defer func() {
-		if tcpConn == nil {
+		if netConn == nil {
 			conn.Close()
 		}
 	}()
@@ -62,7 +63,7 @@ func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (tcpConn, u
 	// auth
 	n, err := conn.Read(buf[:2])
 	if err != nil || n != 2 || buf[0] != 5 {
-		logrus.Debug("invalid auth packet format @1")
+		log.Debug("invalid auth packet format @1")
 		return
 	}
 
@@ -70,20 +71,20 @@ func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (tcpConn, u
 
 	n, err = conn.Read(buf[:nMethods])
 	if err != nil || n != int(nMethods) {
-		logrus.Debug("invalid auth packet format @2")
+		log.Debug("invalid auth packet format @2")
 		return
 	}
 
 	n, err = conn.Write([]byte{0x05, 0x00})
 	if err != nil || n != 2 {
-		logrus.Debug("invalid auth packet format @3")
+		log.Debug("invalid auth packet format @3")
 		return
 	}
 
 	// handle command
 	n, err = conn.Read(buf[:4])
 	if err != nil || n != 4 || buf[0] != 5 {
-		logrus.Debug("handle command error @1")
+		log.Debug("handle command error @1")
 		return
 	}
 
@@ -94,46 +95,48 @@ func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (tcpConn, u
 	case 1:
 		n, err = conn.Read(buf[:4])
 		if err != nil || n != 4 {
-			logrus.Debug("handle command error @2")
+			log.Debug("handle command error @2")
 			return
 		}
 		addr = fmt.Sprintf("%d.%d.%d.%d", buf[0], buf[1], buf[2], buf[3])
 	case 3:
 		n, err = conn.Read(buf[:1])
 		if err != nil || n != 1 {
-			logrus.Debug("handle command error @3")
+			log.Debug("handle command error @3")
 			return
 		}
 		addrLen := buf[0]
 		n, err = conn.Read(buf[:addrLen])
 		if err != nil || n != int(addrLen) {
-			logrus.Debug("handle command error @4")
+			log.Debug("handle command error @4")
 			return
 		}
 		addr = string(buf[:addrLen])
 	default:
-		logrus.Debug("handle command error @5")
+		log.Debug("handle command error @5")
 		return
 	}
 
 	n, err = conn.Read(buf[:2])
 	if err != nil || n != 2 {
-		logrus.Debug("handle command error @read-port")
+		log.Debug("handle command error @read-port")
 		return
 	}
 	port := spec.BytesToUint16(buf[:2])
 
+	fullAddr := fmt.Sprintf("%s:%d", addr, port)
 	switch cmd {
 	// 1. CONNECT
 	case 1:
-		tcpConn, err = s.opts.TCPDialer(ctx, fmt.Sprintf("%s:%d", addr, port))
+		netConn, err = s.opts.TCPDialer(ctx, fullAddr)
 		if err != nil {
-			logrus.Debug("handle command error @CONNECT ", err)
+			log.Errorf("establishing tcp://%s error: %s", fullAddr, err)
+			respHostUnreachable(conn)
 			return
 		}
 		conn.Write([]byte{0x05, 0x00, 0x00, 0x01})
-		if tcpConn.LocalAddr() != nil {
-			addrPort := netip.MustParseAddrPort(tcpConn.LocalAddr().String())
+		if netConn.LocalAddr() != nil {
+			addrPort := netip.MustParseAddrPort(netConn.LocalAddr().String())
 			ip := addrPort.Addr().As4()
 			conn.Write(ip[:])
 			conn.Write(spec.Uint16ToBytes(addrPort.Port()))
@@ -144,14 +147,16 @@ func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (tcpConn, u
 		return
 	// 2. UDP ASSOCIATE
 	case 3:
-		tcpConn, err = s.opts.UDPDialer(ctx, fmt.Sprintf("%s:%d", addr, port))
+		netConn, err = s.opts.UDPDialer(ctx, fullAddr)
 		if err != nil {
-			logrus.Debug("handle command error @UDP ", err)
+			log.Errorf("establishing udp://%s error: %s", fullAddr, err)
+			respHostUnreachable(conn)
 			return
 		}
 		udpConn, err = net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(0, 0, 0, 0), Port: 0})
 		if err != nil {
-			logrus.Debug("handle command error @UDP listener")
+			log.Debug("handle command error @UDP listener")
+			respGeneralErr(conn)
 			return
 		}
 		conn.Write([]byte{0x05, 0x00, 0x00, 0x01})
@@ -160,9 +165,10 @@ func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (tcpConn, u
 		conn.Write(ip[:])
 		conn.Write(spec.Uint16ToBytes(addrPort.Port()))
 		return
+	// 3. do not support BIND now
 	default:
-		logrus.Debug("handle command error @unsupported")
-		// 3. do not support BIND now
+		log.Debug("do not support BIND now")
+		respNotSupported(conn)
 	}
 	return
 }
@@ -177,4 +183,16 @@ func (s *Socks5Server) pipe(conn, rConn net.Conn) {
 	}()
 	io.Copy(rConn, conn)
 	rConn.Close()
+}
+
+func respHostUnreachable(conn net.Conn) {
+	conn.Write([]byte{0x05, 0x04, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
+}
+
+func respGeneralErr(conn net.Conn) {
+	conn.Write([]byte{0x05, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
+}
+
+func respNotSupported(conn net.Conn) {
+	conn.Write([]byte{0x05, 0x07, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 }
