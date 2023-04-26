@@ -14,7 +14,7 @@ import (
 
 	"github.com/oschwald/geoip2-golang"
 	"github.com/rkonfj/toh/client"
-	"github.com/rkonfj/toh/cmd/socks5/ruleset"
+	"github.com/rkonfj/toh/cmd/s5/ruleset"
 	"github.com/rkonfj/toh/socks5"
 	"github.com/rkonfj/toh/spec"
 	"github.com/sirupsen/logrus"
@@ -160,7 +160,7 @@ func selectServer(servers []*ToH) *ToH {
 
 func securityHttpClient(servers []*ToH) *http.Client {
 	return &http.Client{
-		Timeout: 30 * time.Second,
+		Timeout: 120 * time.Second,
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 				server := selectServer(servers)
@@ -199,7 +199,7 @@ func getGeoip2Path(hc *http.Client, dataPath, geoip2Path string) string {
 		}
 		return filepath.Join(dataPath, geoip2Path)
 	}
-	logrus.Info("downloading country.mmdb to ", dataPath)
+	logrus.Infof("downloading country.mmdb to %s. this can take up to 2m0s", dataPath)
 	mmdbPath := filepath.Join(dataPath, "country.mmdb")
 	resp, err := hc.Get("https://github.com/Dreamacro/maxmind-geoip/releases/latest/download/Country.mmdb")
 	if err != nil {

@@ -1,10 +1,10 @@
-package socks5cmd
+package s5
 
 import (
 	"os"
 	"path/filepath"
 
-	"github.com/rkonfj/toh/cmd/socks5/server"
+	"github.com/rkonfj/toh/cmd/s5/server"
 	"github.com/rkonfj/toh/spec"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -15,8 +15,8 @@ var Cmd *cobra.Command
 
 func init() {
 	Cmd = &cobra.Command{
-		Use:     "socks5",
-		Short:   "Socks5 proxy server",
+		Use:     "s5",
+		Short:   "Socks5 proxy server act as ToH client",
 		Args:    cobra.NoArgs,
 		PreRunE: initAction,
 		RunE:    startAction,

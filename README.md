@@ -17,28 +17,30 @@
 - Run
 ```
 # ./toh serve --help
-Server daemon
+ToH server daemon
 
 Usage:
-  toh [flags]
+  toh serve [flags]
 
 Flags:
-      --acl string         file path for authentication (default "acl.json")
-  -h, --help               help for toh
-  -l, --listen string      http server listen address (ip:port) (default "0.0.0.0:9986")
+      --acl string      file path for authentication (default "acl.json")
+  -h, --help            help for serve
+  -l, --listen string   http server listen address (default "0.0.0.0:9986")
+
+Global Flags:
       --log-level string   logrus logger level (default "info")
 # ./toh serve
-INFO[2023-04-24T19:35:12+08:00] initializing ack file acl.json               
+time="2023-04-26T21:49:33+08:00" level=info msg="initializing ack file acl.json"
 {
     "keys": [
         {
             "name": "default",
-            "key": "8bed5424-5058-434d-b1d7-ba7db0d780af"
+            "key": "29bc9263-0669-4dac-bfb2-a90461aa2ade"
         }
     ]
 }
-INFO[2023-04-24T19:35:12+08:00] acl: load 1 keys                             
-INFO[2023-04-24T19:35:12+08:00] server listen 0.0.0.0:9986 now
+time="2023-04-26T21:49:33+08:00" level=info msg="acl: load 1 keys"
+time="2023-04-26T21:49:33+08:00" level=info msg="server listen on 0.0.0.0:9986 now"
 ```
 the `key` here will used by `pf` or `socks5`
 
@@ -99,30 +101,35 @@ The document has moved
 
 ### Buildin socks5 proxy server act as ToH client
 ```
-# ./toh socks5 --help
-Socks5 proxy server
+# ./toh s5 --help
+Socks5 proxy server act as ToH client
 
 Usage:
-  toh socks5 [flags]
+  toh s5 [flags]
 
 Flags:
-  -c, --config string   socks5 server config file (default is $HOME/.config/toh/socks5.yml)
-  -h, --help            help for socks5
+  -c, --config string       socks5 server config file (default is $HOME/.config/toh/socks5.yml)
+      --dns string          dns to use (enable local dns when not empty)
+      --dns-listen string   local dns (default "0.0.0.0:2053")
+      --dns-proxy string    leave blank to randomly choose one from the config server section
+  -h, --help                help for s5
 
 Global Flags:
       --log-level string   logrus logger level (default "info")
-# ./toh socks5
-INFO[2023-04-24T19:44:25+08:00] initializing config file /home/rkonfj/.config/toh/socks5.yml 
+# ./toh s5
+time="2023-04-26T21:39:22+08:00" level=info msg="initializing config file /home/rkonfj/.config/toh/socks5.yml"
+geoip2: country.mmdb
 listen: 0.0.0.0:2080
 servers:
   - name: us1
     api: wss://us-l4-vultr.synf.in/ws
     key: 5868a941-3025-4c6d-ad3a-41e29bb42e5f
-    ruleset: 
+    ruleset:
       - https://raw.githubusercontent.com/rkonfj/toh/main/ruleset.txt
-INFO[2023-04-24T19:44:25+08:00] downloading https://raw.githubusercontent.com/rkonfj/toh/main/ruleset.txt
-INFO[2023-04-24T19:44:25+08:00] ruleset us1: special 0, direct 0, wildcard 12 
-INFO[2023-04-24T19:44:25+08:00] listen on 0.0.0.0:2080 for socks5 now
+time="2023-04-26T21:39:22+08:00" level=info msg="downloading https://raw.githubusercontent.com/rkonfj/toh/main/ruleset.txt"
+time="2023-04-26T21:39:25+08:00" level=info msg="ruleset us1: special 0, direct 0, wildcard 20"
+time="2023-04-26T21:39:25+08:00" level=info msg="downloading country.mmdb to /home/rkonfj/.config/toh. this can take up to 2m0s"
+time="2023-04-26T21:41:01+08:00" level=info msg="listen on 0.0.0.0:2080 for socks5 now"
 ```
 
 the server `us1` is the test server, will stopped in the future

@@ -11,13 +11,13 @@ var Cmd *cobra.Command
 func init() {
 	Cmd = &cobra.Command{
 		Use:     "serve",
-		Short:   "Server daemon",
+		Short:   "ToH server daemon",
 		Args:    cobra.NoArgs,
 		PreRunE: initAction,
 		RunE:    startAction,
 	}
 	Cmd.Flags().String("acl", "acl.json", "file path for authentication")
-	Cmd.Flags().StringP("listen", "l", "0.0.0.0:9986", "http server listen address (ip:port)")
+	Cmd.Flags().StringP("listen", "l", "0.0.0.0:9986", "http server listen address")
 }
 
 func initAction(cmd *cobra.Command, args []string) error {
