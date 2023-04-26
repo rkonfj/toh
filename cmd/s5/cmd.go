@@ -22,7 +22,7 @@ func init() {
 		RunE:    startAction,
 	}
 	Cmd.Flags().StringP("config", "c", "", "socks5 server config file (default is $HOME/.config/toh/socks5.yml)")
-	Cmd.Flags().String("dns", "", "dns to use (enable local dns when not empty)")
+	Cmd.Flags().String("dns", "", "dns to use (leave blank to disable local dns)")
 	Cmd.Flags().String("dns-listen", "0.0.0.0:2053", "local dns")
 	Cmd.Flags().String("dns-proxy", "", "leave blank to randomly choose one from the config server section")
 }
