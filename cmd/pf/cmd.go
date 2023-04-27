@@ -1,7 +1,6 @@
 package pf
 
 import (
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
@@ -9,11 +8,10 @@ var Cmd *cobra.Command
 
 func init() {
 	Cmd = &cobra.Command{
-		Use:     "pf",
-		Short:   "Port-forwarding daemon act as ToH client",
-		Args:    cobra.NoArgs,
-		PreRunE: initAction,
-		RunE:    startAction,
+		Use:   "pf",
+		Short: "Port-forwarding daemon act as ToH client",
+		Args:  cobra.NoArgs,
+		RunE:  startAction,
 	}
 	Cmd.Flags().StringP("server", "s", "", "the ToH server address")
 	Cmd.Flags().StringP("api-key", "k", "", "the ToH api-key for authcate")
@@ -21,20 +19,6 @@ func init() {
 
 	Cmd.MarkFlagRequired("server")
 	Cmd.MarkFlagRequired("api-key")
-}
-
-func initAction(cmd *cobra.Command, args []string) error {
-	logLevel, err := cmd.Flags().GetString("log-level")
-	if err != nil {
-		return err
-	}
-	ll, err := logrus.ParseLevel(logLevel)
-	if err != nil {
-		return err
-	}
-	logrus.SetLevel(ll)
-	logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
-	return nil
 }
 
 func startAction(cmd *cobra.Command, args []string) error {

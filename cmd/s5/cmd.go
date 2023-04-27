@@ -15,30 +15,15 @@ var Cmd *cobra.Command
 
 func init() {
 	Cmd = &cobra.Command{
-		Use:     "s5",
-		Short:   "Socks5 proxy server act as ToH client",
-		Args:    cobra.NoArgs,
-		PreRunE: initAction,
-		RunE:    startAction,
+		Use:   "s5",
+		Short: "Socks5 proxy server act as ToH client",
+		Args:  cobra.NoArgs,
+		RunE:  startAction,
 	}
 	Cmd.Flags().StringP("config", "c", "", "socks5 server config file (default is $HOME/.config/toh/socks5.yml)")
 	Cmd.Flags().String("dns", "", "dns to use (leave blank to disable local dns)")
 	Cmd.Flags().String("dns-listen", "0.0.0.0:2053", "local dns")
 	Cmd.Flags().String("dns-proxy", "", "leave blank to randomly choose one from the config server section")
-}
-
-func initAction(cmd *cobra.Command, args []string) error {
-	logLevel, err := cmd.Flags().GetString("log-level")
-	if err != nil {
-		return err
-	}
-	ll, err := logrus.ParseLevel(logLevel)
-	if err != nil {
-		return err
-	}
-	logrus.SetLevel(ll)
-	logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true, DisableColors: true})
-	return nil
 }
 
 func startAction(cmd *cobra.Command, args []string) error {
