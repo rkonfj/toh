@@ -1,12 +1,14 @@
 package socks5
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
 	"net"
 	"net/netip"
 	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/rkonfj/toh/spec"
@@ -89,7 +91,7 @@ func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (dialerName
 	if buf[0] != 5 {
 		conn.Read(buf[2:3])
 		if string(buf[:3]) == "GET" {
-			s.httpResponsePACScript(conn)
+			s.serveTemporaryHTTPServer(conn)
 			return
 		}
 		log.Debug("unsupport socks version, closed")
@@ -219,15 +221,40 @@ func (s *Socks5Server) pipe(conn, rConn net.Conn) (lbc, rbc int64) {
 	return
 }
 
-func (s *Socks5Server) httpResponsePACScript(conn net.Conn) {
-	content := fmt.Sprintf("function FindProxyForURL(url, host) {\r\n    return 'SOCKS5 127.0.0.1:%d'\r\n}\r\n",
-		netip.MustParseAddrPort(s.opts.Listen).Port())
-	conn.Write([]byte("HTTP/1.1 200 OK\r\nContent-Type: application/javascript\r\nConnection: close\r\nContent-Length: "))
+func (s *Socks5Server) serveTemporaryHTTPServer(conn net.Conn) {
+	listenAddr := strings.Split(s.opts.Listen, ":")
+	pacScriptServer := s.opts.Listen
+	if listenAddr[0] == "0.0.0.0" || listenAddr[0] == "" {
+		pacScriptServer = fmt.Sprintf("127.0.0.1:%s", listenAddr[1])
+	}
+	content := fmt.Sprintf("// give me a star please: https://github.com/rkonfj/toh\n\n"+
+		"function FindProxyForURL(url, host) {\n"+
+		"    if (isPlainHostName(host)) return 'DIRECT'\n"+
+		"    var ip = dnsResolve(host)\n"+
+		"    if (isInNet(ip, '10.0.0.0', '255.0.0.0') ||\n"+
+		"    isInNet(ip, '172.16.0.0', '255.240.0.0') ||\n"+
+		"    isInNet(ip, '192.168.0.0', '255.255.0.0') ||\n"+
+		"    isInNet(ip, '127.0.0.0', '255.255.255.0')) return 'DIRECT'\n"+
+		"    return 'SOCKS5 %s'\n}\n", pacScriptServer)
+	respHTTP(conn, content)
+	for {
+		r := bufio.NewReader(conn)
+		line, err := r.ReadString('\n')
+		if err != nil {
+			return
+		}
+		if strings.HasPrefix(line, "GET ") {
+			respHTTP(conn, content)
+		}
+	}
+}
+
+func respHTTP(conn net.Conn, content string) {
+	conn.Write([]byte("HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: "))
 	conn.Write([]byte(strconv.Itoa(len(content))))
 	conn.Write([]byte("\r\n\r\n"))
 	conn.Write([]byte(content))
 }
-
 func respHostUnreachable(conn net.Conn) {
 	conn.Write([]byte{0x05, 0x04, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 }

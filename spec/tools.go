@@ -49,7 +49,7 @@ func ResolveIP(ctx context.Context, dial Dial, addr string) (a string, err error
 	if err != nil {
 		return
 	}
-	dnsLookupCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	dnsLookupCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 	ips, err := (&net.Resolver{
 		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
