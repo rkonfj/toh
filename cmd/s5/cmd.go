@@ -31,11 +31,11 @@ func startAction(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	go server.StartDomainNameServer(opts.dns, opts.dnsListen, opts.dnsProxy, opts.cfg)
 	sm, err := server.NewSocks5Server(opts.datapath, opts.cfg)
 	if err != nil {
 		return err
 	}
+	go server.StartDomainNameServer(opts.dns, opts.dnsListen, opts.dnsProxy, opts.cfg)
 	return sm.Run()
 }
 
@@ -52,6 +52,7 @@ func processOptions(cmd *cobra.Command) (opts Options, err error) {
 	if err != nil {
 		return
 	}
+
 	opts.dnsListen, err = cmd.Flags().GetString("dns-listen")
 	if err != nil {
 		return
@@ -62,17 +63,25 @@ func processOptions(cmd *cobra.Command) (opts Options, err error) {
 		return
 	}
 
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return
-	}
-	defer func() {
-		opts.datapath = filepath.Join(homeDir, ".config", "toh")
-	}()
 	configPath, err := cmd.Flags().GetString("config")
 	if err != nil {
 		return
 	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+
+	defer func() {
+		datapath := filepath.Dir(configPath)
+		if datapath == "." {
+			opts.datapath = filepath.Join(homeDir, ".config", "toh")
+			return
+		}
+		opts.datapath = datapath
+	}()
+
 	var configF *os.File
 	if configPath != "" {
 		configF, err = os.Open(configPath)
