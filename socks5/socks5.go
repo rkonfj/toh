@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/netip"
+	"strconv"
 	"sync"
 
 	"github.com/rkonfj/toh/spec"
@@ -80,8 +81,18 @@ func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (dialerName
 
 	// auth
 	n, err := conn.Read(buf[:2])
-	if err != nil || n != 2 || buf[0] != 5 {
+	if err != nil || n != 2 {
 		log.Debug("invalid auth packet format @1")
+		return
+	}
+
+	if buf[0] != 5 {
+		conn.Read(buf[2:3])
+		if string(buf[:3]) == "GET" {
+			s.httpResponsePACScript(conn)
+			return
+		}
+		log.Debug("unsupport socks version, closed")
 		return
 	}
 
@@ -206,6 +217,15 @@ func (s *Socks5Server) pipe(conn, rConn net.Conn) (lbc, rbc int64) {
 	rConn.Close()
 	wg.Wait()
 	return
+}
+
+func (s *Socks5Server) httpResponsePACScript(conn net.Conn) {
+	content := fmt.Sprintf("function FindProxyForURL(url, host) {\r\n    return 'SOCKS5 127.0.0.1:%d'\r\n}\r\n",
+		netip.MustParseAddrPort(s.opts.Listen).Port())
+	conn.Write([]byte("HTTP/1.1 200 OK\r\nContent-Type: application/javascript\r\nConnection: close\r\nContent-Length: "))
+	conn.Write([]byte(strconv.Itoa(len(content))))
+	conn.Write([]byte("\r\n\r\n"))
+	conn.Write([]byte(content))
 }
 
 func respHostUnreachable(conn net.Conn) {
