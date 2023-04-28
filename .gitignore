@@ -3,3 +3,4 @@ test*
 acl.json
 *.exe
 dist/
+*.zip
