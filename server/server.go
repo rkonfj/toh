@@ -53,7 +53,6 @@ func (s TohServer) upgradeWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	if !s.acl.Check(apiKey) {
 		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte("401 Unauthorized"))
 		logrus.Infof("%s -> %s://%s auth failed", clientIP, network, addr)
 		return
 	}
