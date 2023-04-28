@@ -17,7 +17,7 @@ import (
 
 func main() {
 	c, err := client.NewTohClient(client.Options{
-		ServerAddr: "wss://l4us.synf.in/ws",
+		ServerAddr: "wss://us-l4-vultr.synf.in/ws",
 		ApiKey:     "5868a941-3025-4c6d-ad3a-41e29bb42e5f",
 	})
 	if err != nil {
@@ -32,7 +32,7 @@ func main() {
 		},
 	}
 
-	resp, err := httpClient.Get("https://www.google.com")
+	resp, err := httpClient.Get("https://api64.ipify.org")
 	if err != nil {
 		panic(err)
 	}

@@ -15,7 +15,7 @@ func init() {
 	}
 	Cmd.Flags().StringP("server", "s", "", "the ToH server address")
 	Cmd.Flags().StringP("api-key", "k", "", "the ToH api-key for authcate")
-	Cmd.Flags().StringSliceP("forward", "f", []string{}, "tunnel mapping (<net>/<local>/<remote>, ie: udp/0.0.0.0:53/8.8.8.8:53)")
+	Cmd.Flags().StringSliceP("forward", "f", []string{}, "tunnel mapping (<net>/<local>/<remote>, i.e. udp/0.0.0.0:53/8.8.8.8:53)")
 
 	Cmd.MarkFlagRequired("server")
 	Cmd.MarkFlagRequired("api-key")

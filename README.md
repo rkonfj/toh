@@ -2,8 +2,8 @@
 
 `toh` is tcp over http. short words: proxy your network over websocket
 ## Table of contents
-- [ToH server](#toh-server-as-backend)
-- [Nginx or Caddy](#nginx-or-caddy)
+- [ToH server](#toh-server)
+- [Caddy or Nginx wrap ToH server with TLS](#caddy-or-nginx-wrap-toh-server-with-tls)
 - [Buildin port-forward tool `pf` act as ToH client](#buildin-port-forward-tool-pf-act-as-toh-client)
 - [Buildin socks5 proxy server `s5` act as ToH client](#buildin-socks5-proxy-server-s5-act-as-toh-client)
 
@@ -35,7 +35,7 @@ time="2023-04-26T21:49:33+08:00" level=info msg="initializing ack file acl.json"
     "keys": [
         {
             "name": "default",
-            "key": "29bc9263-0669-4dac-bfb2-a90461aa2ade"
+            "key": "5868a941-3025-4c6d-ad3a-41e29bb42e5f"
         }
     ]
 }
@@ -44,17 +44,17 @@ time="2023-04-26T21:49:33+08:00" level=info msg="server listen on 0.0.0.0:9986 n
 ```
 the `key` here will used by `pf` or `socks5`
 
-### Caddy or Nginx
+### Caddy or Nginx wrap ToH server with TLS
 - Caddy
 ```sh
-$ caddy reverse-proxy --from https://l4us.synf.in --to 127.0.0.1:9986
+$ caddy reverse-proxy --from https://us-l4-vultr.synf.in --to 127.0.0.1:9986
 ```
 
 - Nginx
 ```
 server {
 	listen 443 ssl;
-	server_name l4us.synf.in;
+	server_name us-l4-vultr.synf.in;
 
 	ssl_certificate     tls.crt;
 	ssl_certificate_key tls.key;
@@ -81,11 +81,11 @@ Usage:
 
 Flags:
   -k, --api-key string    the ToH api-key for authcate
-  -f, --forward strings   tunnel mapping (<net>/<local>/<remote>, ie: udp/0.0.0.0:53/8.8.8.8:53)
+  -f, --forward strings   tunnel mapping (<net>/<local>/<remote>, i.e. udp/0.0.0.0:53/8.8.8.8:53)
   -h, --help              help for pf
   -s, --server string     the ToH server address
 
-$ ./toh pf -s wss://l4us.synf.in/ws -k 5868a941-3025-4c6d-ad3a-41e29bb42e5f -f udp/127.0.0.53:53/8.8.8.8:53 -f tcp/0.0.0.0:1080/google.com:80
+$ ./toh pf -s wss://us-l4-vultr.synf.in/ws -k 5868a941-3025-4c6d-ad3a-41e29bb42e5f -f udp/127.0.0.53:53/8.8.8.8:53 -f tcp/0.0.0.0:1080/google.com:80
 time="2023-04-28T13:52:31+08:00" level=info msg="listen on 127.0.0.53:53 for udp://8.8.8.8:53 now"
 time="2023-04-28T13:52:31+08:00" level=info msg="listen on 0.0.0.0:1080 for tcp://google.com:80 now"
 ```
@@ -144,9 +144,7 @@ the server `us1` is the test server, will stopped in the future
 
 another shell
 ```sh
-$ https_proxy=socks5://127.0.0.1:2080 curl -i https://www.google.com/generate_204
-HTTP/2 204
-cross-origin-resource-policy: cross-origin
-date: Mon, 24 Apr 2023 01:47:57 GMT
-alt-svc: h3=":443"; ma=2592000,h3-29=":443"; ma=2592000
+$ https_proxy=socks5://127.0.0.1:2080 curl -i https://api64.ipify.org
+104.207.152.45
 ```
+great! the `104.207.152.45` is your proxy IP
