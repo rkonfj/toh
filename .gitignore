@@ -1,3 +1,5 @@
 toh*
 test*
 acl.json
+*.exe
+dist/
