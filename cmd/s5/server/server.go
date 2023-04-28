@@ -191,7 +191,7 @@ func getGeoip2Path(hc *http.Client, dataPath, geoip2Path string) string {
 	mmdbPath := filepath.Join(dataPath, "country.mmdb")
 	resp, err := hc.Get("https://github.com/Dreamacro/maxmind-geoip/releases/latest/download/Country.mmdb")
 	if err != nil {
-		logrus.Error("download error: ", err)
+		logrus.Error(err)
 		return mmdbPath
 	}
 	defer resp.Body.Close()
@@ -201,6 +201,10 @@ func getGeoip2Path(hc *http.Client, dataPath, geoip2Path string) string {
 		return mmdbPath
 	}
 	defer mmdb.Close()
-	io.Copy(mmdb, resp.Body)
+	_, err = io.Copy(mmdb, resp.Body)
+	if err != nil {
+		logrus.Error(err)
+	}
+
 	return mmdbPath
 }
