@@ -9,7 +9,6 @@ import (
 )
 
 func (s *RulebasedSocks5Server) dialTCP(ctx context.Context, addr string) (dialerName string, conn net.Conn, err error) {
-	log := logrus.WithField(spec.AppAddr.String(), ctx.Value(spec.AppAddr))
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
 		return
@@ -30,21 +29,14 @@ func (s *RulebasedSocks5Server) dialTCP(ctx context.Context, addr string) (diale
 		if len(s.groups) > 0 {
 			for _, g := range s.groups {
 				if g.ruleset.CountryMatch(c.Country.IsoCode) {
-					server := selectServer(g.servers)
-					dialerName = server.name
-					log.Infof("%s using %s.%s", addr, g.name, dialerName)
-					conn, err = server.client.DialTCP(ctx, addr)
-					return
+					return dialTCPUseServer(ctx, addr, g.name, selectServer(g.servers))
 				}
 			}
 		}
 
-		for _, toh := range s.servers {
-			if toh.ruleset.CountryMatch(c.Country.IsoCode) {
-				log.Infof("%s using %s", addr, toh.name)
-				dialerName = toh.name
-				conn, err = toh.client.DialTCP(ctx, addr)
-				return
+		for _, s := range s.servers {
+			if s.ruleset.CountryMatch(c.Country.IsoCode) {
+				return dialTCPUseServer(ctx, addr, "", s)
 			}
 		}
 
@@ -54,46 +46,44 @@ func (s *RulebasedSocks5Server) dialTCP(ctx context.Context, addr string) (diale
 	if len(s.groups) > 0 {
 		for _, g := range s.groups {
 			if g.ruleset.SpecialMatch(host) {
-				server := selectServer(g.servers)
-				dialerName = server.name
-				log.Infof("%s using %s.%s", addr, g.name, dialerName)
-				conn, err = server.client.DialTCP(ctx, addr)
-				return
+				return dialTCPUseServer(ctx, addr, g.name, selectServer(g.servers))
 			}
 		}
 
 		for _, g := range s.groups {
 			if g.ruleset.WildcardMatch(host) {
-				server := selectServer(g.servers)
-				dialerName = server.name
-				log.Infof("%s using %s.%s", addr, g.name, dialerName)
-				conn, err = server.client.DialTCP(ctx, addr)
-				return
+				return dialTCPUseServer(ctx, addr, g.name, selectServer(g.servers))
 			}
 		}
 	}
 
-	for _, toh := range s.servers {
-		if toh.ruleset.SpecialMatch(host) {
-			log.Infof("%s using %s", addr, toh.name)
-			dialerName = toh.name
-			conn, err = toh.client.DialTCP(ctx, addr)
-			return
+	for _, s := range s.servers {
+		if s.ruleset.SpecialMatch(host) {
+			return dialTCPUseServer(ctx, addr, "", s)
 		}
 	}
 
-	for _, toh := range s.servers {
-		if toh.ruleset.WildcardMatch(host) {
-			log.Infof("%s using %s", addr, toh.name)
-			dialerName = toh.name
-			conn, err = toh.client.DialTCP(ctx, addr)
-			return
+	for _, s := range s.servers {
+		if s.ruleset.WildcardMatch(host) {
+			return dialTCPUseServer(ctx, addr, "", s)
 		}
 	}
 
 direct:
-	log.Infof("%s using direct", addr)
+	logrus.WithField(spec.AppAddr.String(), ctx.Value(spec.AppAddr)).Infof("%s using direct", addr)
 	dialerName = "direct"
 	conn, err = s.defaultDialer.DialContext(ctx, "tcp", addr)
+	return
+}
+
+func dialTCPUseServer(ctx context.Context, addr, groupName string, server *Server) (dialerName string, conn net.Conn, err error) {
+	log := logrus.WithField(spec.AppAddr.String(), ctx.Value(spec.AppAddr))
+	dialerName = server.name
+	if groupName == "" {
+		log.Infof("%s using %s latency %s", addr, dialerName, server.latency)
+	} else {
+		log.Infof("%s using %s.%s latency %s", addr, groupName, dialerName, server.latency)
+	}
+	conn, err = server.client.DialTCP(ctx, addr)
 	return
 }

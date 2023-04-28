@@ -124,10 +124,11 @@ func defaultOptions() *server.Config {
 		Geoip2: "country.mmdb",
 		Listen: "0.0.0.0:2080",
 		Servers: []server.TohServer{{
-			Name:    "us1",
-			Api:     "wss://us-l4-vultr.synf.in/ws",
-			Key:     "5868a941-3025-4c6d-ad3a-41e29bb42e5f",
-			Ruleset: []string{"https://raw.githubusercontent.com/rkonfj/toh/main/ruleset.txt"},
+			Name:        "us1",
+			Api:         "wss://us-l4-vultr.synf.in/ws",
+			Key:         "5868a941-3025-4c6d-ad3a-41e29bb42e5f",
+			Ruleset:     []string{"https://raw.githubusercontent.com/rkonfj/toh/main/ruleset.txt"},
+			Healthcheck: "https://www.google.com/generate_204",
 		}},
 	}
 }

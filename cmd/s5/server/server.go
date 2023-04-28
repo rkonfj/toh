@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"io"
-	"math/rand"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -29,10 +29,11 @@ type Config struct {
 }
 
 type TohServer struct {
-	Name    string   `yaml:"name"`
-	Api     string   `yaml:"api"`
-	Key     string   `yaml:"key"`
-	Ruleset []string `yaml:"ruleset"`
+	Name        string   `yaml:"name"`
+	Api         string   `yaml:"api"`
+	Key         string   `yaml:"key"`
+	Ruleset     []string `yaml:"ruleset"`
+	Healthcheck string   `yaml:"healthcheck"`
 }
 
 type ServerGroup struct {
@@ -50,9 +51,11 @@ type RulebasedSocks5Server struct {
 }
 
 type Server struct {
-	name    string
-	client  *client.TohClient
-	ruleset *ruleset.Ruleset
+	name       string
+	client     *client.TohClient
+	httpClient *http.Client
+	ruleset    *ruleset.Ruleset
+	latency    time.Duration
 }
 
 type Group struct {
@@ -81,6 +84,18 @@ func NewSocks5Server(dataPath string, cfg Config) (socks5Server *RulebasedSocks5
 		server := &Server{
 			name:   s.Name,
 			client: c,
+			httpClient: &http.Client{
+				Timeout: 120 * time.Second,
+				Transport: &http.Transport{
+					DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+						addr, err := spec.ResolveIP(ctx, c.DialTCP, addr)
+						if err != nil {
+							return nil, err
+						}
+						return c.DialTCP(ctx, addr)
+					},
+				},
+			},
 		}
 		if s.Ruleset != nil {
 			server.ruleset, err = ruleset.Parse(c, s.Name, s.Ruleset, dataPath)
@@ -88,6 +103,7 @@ func NewSocks5Server(dataPath string, cfg Config) (socks5Server *RulebasedSocks5
 				return
 			}
 		}
+		go healthcheck(server, s.Healthcheck)
 		socks5Server.servers = append(socks5Server.servers, server)
 	}
 
@@ -113,8 +129,7 @@ func NewSocks5Server(dataPath string, cfg Config) (socks5Server *RulebasedSocks5
 		socks5Server.groups = append(socks5Server.groups, group)
 	}
 
-	httpClient := securityHttpClient(socks5Server.servers)
-	socks5Server.geoip2db, err = openGeoip2(httpClient, dataPath, cfg.Geoip2)
+	socks5Server.geoip2db, err = openGeoip2(selectServer(socks5Server.servers).httpClient, dataPath, cfg.Geoip2)
 	if err != nil {
 		return
 	}
@@ -141,23 +156,10 @@ func (s *RulebasedSocks5Server) dialUDP(ctx context.Context, addr string) (diale
 }
 
 func selectServer(servers []*Server) *Server {
-	return servers[rand.Intn(len(servers))]
-}
-
-func securityHttpClient(servers []*Server) *http.Client {
-	return &http.Client{
-		Timeout: 120 * time.Second,
-		Transport: &http.Transport{
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				server := selectServer(servers)
-				addr, err := spec.ResolveIP(ctx, server.client.DialTCP, addr)
-				if err != nil {
-					return nil, err
-				}
-				return server.client.DialTCP(ctx, addr)
-			},
-		},
-	}
+	sort.Slice(servers, func(i, j int) bool {
+		return servers[i].latency < servers[j].latency
+	})
+	return servers[0]
 }
 
 func openGeoip2(httpClient *http.Client, dataPath, geoip2Path string) (*geoip2.Reader, error) {
