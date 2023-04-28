@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -25,6 +26,9 @@ type Options struct {
 }
 
 func NewTohClient(options Options) (*TohClient, error) {
+	if _, err := url.ParseRequestURI(options.ServerAddr); err != nil {
+		return nil, err
+	}
 	httpClient := &http.Client{
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, network, addr string) (conn net.Conn, err error) {
