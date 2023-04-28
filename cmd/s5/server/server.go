@@ -18,12 +18,14 @@ import (
 	"github.com/rkonfj/toh/socks5"
 	"github.com/rkonfj/toh/spec"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/exp/slices"
 )
 
 type Config struct {
-	Geoip2  string      `yaml:"geoip2"`
-	Listen  string      `yaml:"listen"`
-	Servers []TohServer `yaml:"servers"`
+	Geoip2  string        `yaml:"geoip2"`
+	Listen  string        `yaml:"listen"`
+	Servers []TohServer   `yaml:"servers"`
+	Groups  []ServerGroup `yaml:"groups"`
 }
 
 type TohServer struct {
@@ -33,52 +35,92 @@ type TohServer struct {
 	Ruleset []string `yaml:"ruleset"`
 }
 
+type ServerGroup struct {
+	Name    string   `yaml:"name"`
+	Servers []string `yaml:"servers"`
+	Ruleset []string `yaml:"ruleset"`
+}
+
 type RulebasedSocks5Server struct {
 	cfg           Config
-	servers       []*ToH
+	servers       []*Server
+	groups        []*Group
 	defaultDialer net.Dialer
 	geoip2db      *geoip2.Reader
 }
 
-type ToH struct {
+type Server struct {
 	name    string
 	client  *client.TohClient
 	ruleset *ruleset.Ruleset
 }
 
-func NewSocks5Server(dataPath string, cfg Config) (*RulebasedSocks5Server, error) {
-	var servers []*ToH
+type Group struct {
+	name    string
+	servers []*Server
+	ruleset *ruleset.Ruleset
+}
+
+func NewSocks5Server(dataPath string, cfg Config) (socks5Server *RulebasedSocks5Server, err error) {
+	socks5Server = &RulebasedSocks5Server{
+		cfg:           cfg,
+		servers:       []*Server{},
+		groups:        []*Group{},
+		defaultDialer: net.Dialer{},
+	}
 	for _, s := range cfg.Servers {
-		c, err := client.NewTohClient(client.Options{
+		var c *client.TohClient
+		c, err = client.NewTohClient(client.Options{
 			ServerAddr: s.Api,
 			ApiKey:     s.Key,
 		})
 		if err != nil {
-			return nil, err
+			return
 		}
 
-		rs, err := ruleset.Parse(c, s.Name, s.Ruleset, dataPath)
-		if err != nil {
-			return nil, err
+		server := &Server{
+			name:   s.Name,
+			client: c,
 		}
-		server := &ToH{
-			name:    s.Name,
-			client:  c,
-			ruleset: rs,
+		if s.Ruleset != nil {
+			server.ruleset, err = ruleset.Parse(c, s.Name, s.Ruleset, dataPath)
+			if err != nil {
+				return
+			}
 		}
-		servers = append(servers, server)
+		socks5Server.servers = append(socks5Server.servers, server)
 	}
-	httpClient := securityHttpClient(servers)
-	db, err := openGeoip2(httpClient, dataPath, cfg.Geoip2)
+
+	for _, g := range cfg.Groups {
+		group := &Group{
+			name:    g.Name,
+			servers: []*Server{},
+		}
+		for _, s := range socks5Server.servers {
+			if slices.Contains(g.Servers, s.name) {
+				group.servers = append(group.servers, s)
+			}
+		}
+		if len(group.servers) == 0 {
+			continue
+		}
+		if g.Ruleset != nil {
+			group.ruleset, err = ruleset.Parse(selectServer(group.servers).client, g.Name, g.Ruleset, dataPath)
+			if err != nil {
+				return
+			}
+		}
+		socks5Server.groups = append(socks5Server.groups, group)
+	}
+
+	httpClient := securityHttpClient(socks5Server.servers)
+	socks5Server.geoip2db, err = openGeoip2(httpClient, dataPath, cfg.Geoip2)
 	if err != nil {
-		return nil, err
+		return
 	}
-	return &RulebasedSocks5Server{
-		cfg:           cfg,
-		servers:       servers,
-		defaultDialer: net.Dialer{},
-		geoip2db:      db,
-	}, nil
+	logrus.Infof("total %d proxy servers and %d groups loaded", len(socks5Server.servers), len(socks5Server.groups))
+	ruleset.ResetCache()
+	return
 }
 
 func (s *RulebasedSocks5Server) Run() error {
@@ -91,62 +133,6 @@ func (s *RulebasedSocks5Server) Run() error {
 	return ss.Run()
 }
 
-func (s *RulebasedSocks5Server) dialTCP(ctx context.Context, addr string) (dialerName string, conn net.Conn, err error) {
-	log := logrus.WithField(spec.AppAddr.String(), ctx.Value(spec.AppAddr))
-	host, _, err := net.SplitHostPort(addr)
-	if err != nil {
-		return
-	}
-
-	ip := net.ParseIP(host)
-	if ip != nil {
-		c, _err := s.geoip2db.Country(ip)
-		if _err != nil {
-			err = _err
-			return
-		}
-
-		if len(c.Country.IsoCode) == 0 {
-			goto direct
-		}
-
-		for _, toh := range s.servers {
-			if toh.ruleset.CountryMatch(c.Country.IsoCode) {
-				log.Infof("%s using %s", addr, toh.name)
-				dialerName = toh.name
-				conn, err = toh.client.DialTCP(ctx, addr)
-				return
-			}
-		}
-
-		goto direct
-	}
-
-	for _, toh := range s.servers {
-		if toh.ruleset.SpecialMatch(host) {
-			log.Infof("%s using %s", addr, toh.name)
-			dialerName = toh.name
-			conn, err = toh.client.DialTCP(ctx, addr)
-			return
-		}
-	}
-
-	for _, toh := range s.servers {
-		if toh.ruleset.WildcardMatch(host) {
-			log.Infof("%s using %s", addr, toh.name)
-			dialerName = toh.name
-			conn, err = toh.client.DialTCP(ctx, addr)
-			return
-		}
-	}
-
-direct:
-	log.Infof("%s using direct", addr)
-	dialerName = "direct"
-	conn, err = s.defaultDialer.DialContext(ctx, "tcp", addr)
-	return
-}
-
 func (s *RulebasedSocks5Server) dialUDP(ctx context.Context, addr string) (dialerName string, conn net.Conn, err error) {
 	toh := selectServer(s.servers)
 	dialerName = toh.name
@@ -154,11 +140,11 @@ func (s *RulebasedSocks5Server) dialUDP(ctx context.Context, addr string) (diale
 	return
 }
 
-func selectServer(servers []*ToH) *ToH {
+func selectServer(servers []*Server) *Server {
 	return servers[rand.Intn(len(servers))]
 }
 
-func securityHttpClient(servers []*ToH) *http.Client {
+func securityHttpClient(servers []*Server) *http.Client {
 	return &http.Client{
 		Timeout: 120 * time.Second,
 		Transport: &http.Transport{

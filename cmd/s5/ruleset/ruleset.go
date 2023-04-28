@@ -2,6 +2,7 @@ package ruleset
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/base64"
 	"errors"
@@ -18,6 +19,8 @@ import (
 	"github.com/sirupsen/logrus"
 	"golang.org/x/exp/slices"
 )
+
+var cache = make(map[string][]byte)
 
 type Ruleset struct {
 	client           spec.TohClient
@@ -63,23 +66,32 @@ func Parse(client spec.TohClient, name string, ruleset []string, datapath string
 		}
 		readCloser.Close()
 	}
-	logrus.Infof("ruleset %s: special %d, direct %d, wildcard %d",
-		rs.proxy, len(rs.specialSet), len(rs.directSet), len(rs.wildcardSet))
+	ipRules := ""
 	if len(rs.directCountrySet) > 0 {
-		logrus.Infof("ruleset %s if-ip: direct %s", rs.proxy, rs.directCountrySet)
-
+		ipRules = fmt.Sprintf(", if-ip direct %s", rs.directCountrySet)
 	} else if len(rs.proxyCountrySet) > 0 {
-		logrus.Infof("ruleset %s if-ip: proxy %s", rs.proxy, rs.proxyCountrySet)
+		ipRules = fmt.Sprintf(", if-ip proxy %s", rs.proxyCountrySet)
 	}
+	logrus.Infof("ruleset %5s: special %d, direct %d, wildcard %d%s",
+		rs.proxy, len(rs.specialSet), len(rs.directSet), len(rs.wildcardSet), ipRules)
 	return
 }
 
+func ResetCache() {
+	cache = nil
+}
+
 func (rs *Ruleset) download(ruleLocation string) (reader io.ReadCloser, err error) {
+	if b, ok := cache[ruleLocation]; ok {
+		return io.NopCloser(bytes.NewReader(b)), nil
+	}
 	logrus.Infof("downloading %s", ruleLocation)
-	reader, err = readerFromURL(rs.client, ruleLocation)
+	b, err := readerFromURL(rs.client, ruleLocation)
 	if err != nil {
 		return
 	}
+	cache[ruleLocation] = b
+	reader = io.NopCloser(bytes.NewReader(b))
 	return
 }
 
@@ -162,7 +174,7 @@ func (rs *Ruleset) CountryMatch(country string) bool {
 	return slices.Contains(rs.proxyCountrySet, country)
 }
 
-func readerFromURL(client spec.TohClient, url string) (io.ReadCloser, error) {
+func readerFromURL(client spec.TohClient, url string) ([]byte, error) {
 	resp, err := (&http.Client{
 		Timeout: 15 * time.Second,
 		Transport: &http.Transport{
@@ -184,7 +196,11 @@ func readerFromURL(client spec.TohClient, url string) (io.ReadCloser, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("%s %s", url, resp.Status)
 	}
-	return resp.Body, nil
+	b, err := io.ReadAll(io.LimitReader(resp.Body, 1024*1024))
+	if err != nil {
+		return nil, err
+	}
+	return b, nil
 }
 
 func trim(s string) string {
