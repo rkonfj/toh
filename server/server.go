@@ -75,6 +75,7 @@ func (s TohServer) upgradeWebSocket(w http.ResponseWriter, r *http.Request) {
 			In:         lbc,
 			Out:        rbc,
 			Key:        apiKey,
+			Network:    network,
 			ClientIP:   clientIP,
 			RemoteAddr: addr,
 		}
