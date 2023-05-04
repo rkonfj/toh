@@ -15,36 +15,20 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type CacheEntry struct {
+type cacheEntry struct {
 	Response dns.Msg
 	Expire   time.Time
 }
 
-type Cache struct {
-	sync.RWMutex
-	entries map[string]CacheEntry
-}
-
-func (c *Cache) Get(key string) (CacheEntry, bool) {
-	c.RLock()
-	defer c.RUnlock()
-	entry, ok := c.entries[key]
-	return entry, ok
-}
-
-func (c *Cache) Set(key string, entry CacheEntry) {
-	c.Lock()
-	defer c.Unlock()
-	c.entries[key] = entry
-}
-
 type DomainNameServer struct {
-	cache     *Cache
-	remoteDNS string
-	listen    string
-	tohCliet  *client.TohClient
-	tohName   string
-	dnsClient *dns.Client
+	cacheLock   sync.RWMutex
+	cache       map[string]*cacheEntry
+	cacheTicker *time.Ticker
+	remoteDNS   string
+	listen      string
+	tohCliet    *client.TohClient
+	tohName     string
+	dnsClient   *dns.Client
 }
 
 func NewDomainNameServer(remoteDNS, listen, proxy string, cfg Config) (s *DomainNameServer, err error) {
@@ -87,16 +71,45 @@ func NewDomainNameServer(remoteDNS, listen, proxy string, cfg Config) (s *Domain
 	}
 
 	s = &DomainNameServer{
-		cache: &Cache{
-			entries: make(map[string]CacheEntry),
-		},
-		remoteDNS: remoteDNS,
-		listen:    listen,
-		tohCliet:  c,
-		tohName:   server.Name,
-		dnsClient: &dns.Client{},
+		cacheLock:   sync.RWMutex{},
+		cache:       make(map[string]*cacheEntry),
+		cacheTicker: time.NewTicker(10 * time.Minute),
+		remoteDNS:   remoteDNS,
+		listen:      listen,
+		tohCliet:    c,
+		tohName:     server.Name,
+		dnsClient:   &dns.Client{},
 	}
 	return
+}
+
+func (c *DomainNameServer) get(key string) (*cacheEntry, bool) {
+	c.cacheLock.RLock()
+	defer c.cacheLock.RUnlock()
+	entry, ok := c.cache[key]
+	return entry, ok
+}
+
+func (c *DomainNameServer) set(key string, entry *cacheEntry) {
+	c.cacheLock.Lock()
+	defer c.cacheLock.Unlock()
+	c.cache[key] = entry
+}
+
+func (c *DomainNameServer) evictCacheLoop() {
+	c.cacheLock.Lock()
+	defer c.cacheLock.Unlock()
+	for range c.cacheTicker.C {
+		expiredKeys := []string{}
+		for k, v := range c.cache {
+			if time.Now().After(v.Expire.Add(24 * time.Hour)) {
+				expiredKeys = append(expiredKeys, k)
+			}
+		}
+		for _, k := range expiredKeys {
+			c.cache[k] = nil
+		}
+	}
 }
 
 func (s *DomainNameServer) Run() {
@@ -115,11 +128,12 @@ func (s *DomainNameServer) Run() {
 		defer wg.Done()
 		logrus.Error(tcpServer.ListenAndServe())
 	}()
+	go s.evictCacheLoop()
 	wg.Wait()
 }
 
 func (s *DomainNameServer) query(w dns.ResponseWriter, r *dns.Msg) {
-	entry, ok := s.cache.Get(r.Question[0].String())
+	entry, ok := s.get(r.Question[0].String())
 	if ok {
 		entry.Response.Id = r.Id
 		w.WriteMsg(&entry.Response)
@@ -136,7 +150,7 @@ func (s *DomainNameServer) query(w dns.ResponseWriter, r *dns.Msg) {
 	}
 }
 
-func (s *DomainNameServer) updateCache(r *dns.Msg) *CacheEntry {
+func (s *DomainNameServer) updateCache(r *dns.Msg) *cacheEntry {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	c, err := s.tohCliet.DialUDP(ctx, s.remoteDNS)
@@ -158,10 +172,10 @@ func (s *DomainNameServer) updateCache(r *dns.Msg) *CacheEntry {
 			maxTTL = int(ans.Header().Ttl)
 		}
 	}
-	ce := CacheEntry{
+	ce := &cacheEntry{
 		Response: *resp,
 		Expire:   time.Now().Add(time.Duration(maxTTL) * time.Second),
 	}
-	s.cache.Set(r.Question[0].String(), ce)
-	return &ce
+	s.set(r.Question[0].String(), ce)
+	return ce
 }
