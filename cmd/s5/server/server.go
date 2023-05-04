@@ -10,8 +10,10 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/miekg/dns"
 	"github.com/oschwald/geoip2-golang"
 	"github.com/rkonfj/toh/client"
 	"github.com/rkonfj/toh/cmd/s5/ruleset"
@@ -26,6 +28,14 @@ type Config struct {
 	Listen  string        `yaml:"listen"`
 	Servers []TohServer   `yaml:"servers"`
 	Groups  []ServerGroup `yaml:"groups"`
+}
+
+type Options struct {
+	Cfg         Config
+	DataRoot    string
+	DNSListen   string
+	DNSUpstream string
+	DNSEvict    time.Duration
 }
 
 type TohServer struct {
@@ -43,11 +53,15 @@ type ServerGroup struct {
 }
 
 type RulebasedSocks5Server struct {
-	cfg           Config
-	servers       []*Server
-	groups        []*Group
-	defaultDialer net.Dialer
-	geoip2db      *geoip2.Reader
+	opts           Options
+	servers        []*Server
+	groups         []*Group
+	defaultDialer  net.Dialer
+	geoip2db       *geoip2.Reader
+	dnsClient      *dns.Client
+	dnsCache       map[string]*cacheEntry
+	dnsCacheLock   sync.RWMutex
+	dnsCacheTicker *time.Ticker
 }
 
 type Server struct {
@@ -64,12 +78,16 @@ type Group struct {
 	ruleset *ruleset.Ruleset
 }
 
-func NewSocks5Server(dataPath string, cfg Config) (socks5Server *RulebasedSocks5Server, err error) {
+func NewSocks5Server(opts Options) (socks5Server *RulebasedSocks5Server, err error) {
+	cfg := opts.Cfg
 	socks5Server = &RulebasedSocks5Server{
-		cfg:           cfg,
-		servers:       []*Server{},
-		groups:        []*Group{},
-		defaultDialer: net.Dialer{},
+		opts:           opts,
+		servers:        []*Server{},
+		groups:         []*Group{},
+		defaultDialer:  net.Dialer{},
+		dnsClient:      &dns.Client{},
+		dnsCache:       make(map[string]*cacheEntry),
+		dnsCacheTicker: time.NewTicker(5 * time.Minute),
 	}
 	for _, s := range cfg.Servers {
 		var c *client.TohClient
@@ -98,7 +116,7 @@ func NewSocks5Server(dataPath string, cfg Config) (socks5Server *RulebasedSocks5
 			},
 		}
 		if s.Ruleset != nil {
-			server.ruleset, err = ruleset.Parse(c, s.Name, s.Ruleset, dataPath)
+			server.ruleset, err = ruleset.Parse(c, s.Name, s.Ruleset, opts.DataRoot)
 			if err != nil {
 				return
 			}
@@ -121,7 +139,7 @@ func NewSocks5Server(dataPath string, cfg Config) (socks5Server *RulebasedSocks5
 			continue
 		}
 		if g.Ruleset != nil {
-			group.ruleset, err = ruleset.Parse(selectServer(group.servers).client, g.Name, g.Ruleset, dataPath)
+			group.ruleset, err = ruleset.Parse(selectServer(group.servers).client, g.Name, g.Ruleset, opts.DataRoot)
 			if err != nil {
 				return
 			}
@@ -129,7 +147,7 @@ func NewSocks5Server(dataPath string, cfg Config) (socks5Server *RulebasedSocks5
 		socks5Server.groups = append(socks5Server.groups, group)
 	}
 
-	socks5Server.geoip2db, err = openGeoip2(selectServer(socks5Server.servers).httpClient, dataPath, cfg.Geoip2)
+	socks5Server.geoip2db, err = openGeoip2(selectServer(socks5Server.servers).httpClient, opts.DataRoot, cfg.Geoip2)
 	if err != nil {
 		return
 	}
@@ -140,12 +158,42 @@ func NewSocks5Server(dataPath string, cfg Config) (socks5Server *RulebasedSocks5
 
 func (s *RulebasedSocks5Server) Run() error {
 	ss := socks5.NewSocks5Server(socks5.Options{
-		Listen:               s.cfg.Listen,
+		Listen:               s.opts.Cfg.Listen,
 		TCPDialContext:       s.dialTCP,
 		UDPDialContext:       s.dialUDP,
 		TrafficEventConsumer: logTrafficEvent,
 	})
+	go s.runDNS()
 	return ss.Run()
+}
+
+func (s *RulebasedSocks5Server) dialTCP(ctx context.Context, addr string) (dialerName string, conn net.Conn, err error) {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return
+	}
+
+	server, group, err := s.selectProxyServer(host)
+	if err != nil {
+		return
+	}
+
+	log := logrus.WithField(spec.AppAddr.String(), ctx.Value(spec.AppAddr))
+	if server != nil {
+		dialerName = server.name
+		if group == "" {
+			log.Infof("%s using %s latency %s", addr, dialerName, server.latency)
+		} else {
+			log.Infof("%s using %s.%s latency %s", addr, group, dialerName, server.latency)
+		}
+		conn, err = server.client.DialTCP(ctx, addr)
+		return
+	}
+
+	log.Infof("%s using direct", addr)
+	dialerName = "direct"
+	conn, err = s.defaultDialer.DialContext(ctx, "tcp", addr)
+	return
 }
 
 func (s *RulebasedSocks5Server) dialUDP(ctx context.Context, addr string) (dialerName string, conn net.Conn, err error) {

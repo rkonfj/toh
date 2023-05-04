@@ -114,9 +114,9 @@ Usage:
 
 Flags:
   -c, --config string       socks5 server config file (default is $HOME/.config/toh/socks5.yml)
-      --dns string          dns to use (leave blank to disable local dns)
+      --dns string          dns upstream to use (leave blank to disable local dns)
+      --dns-evict string    local dns cache evict duration (default "2h")
       --dns-listen string   local dns (default "0.0.0.0:2053")
-      --dns-proxy string    leave blank to randomly choose one from the config server section
   -h, --help                help for s5
 
 Global Flags:
