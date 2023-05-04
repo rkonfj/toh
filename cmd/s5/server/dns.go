@@ -36,9 +36,9 @@ func StartDomainNameServer(dns, listen, proxy string, cfg Config) {
 	if net.ParseIP(listen) != nil {
 		listen += ":53"
 	}
-	logrus.Infof("server %s used as dns proxy", server.Name)
+	logrus.Infof("server %s is used as dns proxy", server.Name)
 	tm, err := pf.NewTunnelManager(pf.Options{
-		Forwards: []string{fmt.Sprintf("udp/%s/%s", listen, dns)},
+		Forwards: []string{fmt.Sprintf("udp/%s/%s", listen, dns), fmt.Sprintf("tcp/%s/%s", listen, dns)},
 		Server:   server.Api,
 		ApiKey:   server.Key,
 	})
