@@ -2,9 +2,11 @@ package spec
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -153,4 +155,24 @@ func (c *WSStreamConn) SetReadDeadline(t time.Time) error {
 func (c *WSStreamConn) SetWriteDeadline(t time.Time) error {
 	c.writeDeadline = &t
 	return nil
+}
+
+// TohPacketConn wrap UDP conn
+type PacketConnWrapper struct {
+	net.Conn
+	mu sync.Mutex
+}
+
+func (c *PacketConnWrapper) WriteTo(b []byte, addr net.Addr) (int, error) {
+	if c.RemoteAddr().String() != addr.String() {
+		return 0, errors.New("connection-oriented UDP does not allow write to another address")
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.Conn.Write(b)
+}
+
+func (c *PacketConnWrapper) ReadFrom(b []byte) (int, net.Addr, error) {
+	n, err := c.Conn.Read(b)
+	return n, c.RemoteAddr(), err
 }

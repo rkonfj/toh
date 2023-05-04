@@ -35,7 +35,10 @@ func startAction(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	go server.StartDomainNameServer(opts.dns, opts.dnsListen, opts.dnsProxy, opts.cfg)
+	dns, err := server.NewDomainNameServer(opts.dns, opts.dnsListen, opts.dnsProxy, opts.cfg)
+	if err == nil {
+		go dns.Run()
+	}
 	return sm.Run()
 }
 
