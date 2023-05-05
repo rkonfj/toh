@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -87,7 +88,7 @@ func NewSocks5Server(opts Options) (socks5Server *RulebasedSocks5Server, err err
 		defaultDialer:  net.Dialer{},
 		dnsClient:      &dns.Client{},
 		dnsCache:       make(map[string]*cacheEntry),
-		dnsCacheTicker: time.NewTicker(5 * time.Minute),
+		dnsCacheTicker: time.NewTicker(time.Duration(math.Max(float64(opts.DNSEvict/20), float64(time.Minute)))),
 	}
 	for _, s := range cfg.Servers {
 		var c *client.TohClient
@@ -163,7 +164,7 @@ func (s *RulebasedSocks5Server) Run() error {
 		UDPDialContext:       s.dialUDP,
 		TrafficEventConsumer: logTrafficEvent,
 	})
-	go s.runDNS()
+	go s.runDNSIfNeeded()
 	return ss.Run()
 }
 
@@ -181,11 +182,11 @@ func (s *RulebasedSocks5Server) dialTCP(ctx context.Context, addr string) (diale
 	log := logrus.WithField(spec.AppAddr.String(), ctx.Value(spec.AppAddr))
 	if server != nil {
 		dialerName = server.name
-		if group == "" {
-			log.Infof("%s using %s latency %s", addr, dialerName, server.latency)
-		} else {
-			log.Infof("%s using %s.%s latency %s", addr, group, dialerName, server.latency)
+		proxyId := server.name
+		if group != "" {
+			proxyId = group + "." + server.name
 		}
+		log.Infof("%s using %s latency %s", addr, proxyId, server.latency)
 		conn, err = server.client.DialTCP(ctx, addr)
 		return
 	}
