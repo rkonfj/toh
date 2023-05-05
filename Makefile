@@ -14,3 +14,8 @@ winsw: windows
 	curl -L -o dist/socks5toh/socks5toh.exe https://github.com/winsw/winsw/releases/latest/download/WinSW-x64.exe
 	cp toh-${version}-windows-amd64.exe dist/socks5toh/toh.exe
 	zip -rj socks5toh-${version}-winsw-amd64.zip dist/socks5toh 
+image:
+	docker build . -t rkonfj/toh:${version} --build-arg version=${version} --build-arg githash=${git_hash} --build-arg gomod=${gomod}
+clean:
+	rm toh*
+	rm *.zip
