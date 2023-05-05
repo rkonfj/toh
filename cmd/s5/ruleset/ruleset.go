@@ -38,8 +38,10 @@ func Parse(client spec.TohClient, name string, ruleset []string, datapath string
 		var reader io.Reader
 		var readCloser io.ReadCloser
 		if r, ok := strings.CutPrefix(ruleLocation, "b64,"); ok {
-			if strings.HasPrefix(r, "https") {
+			if strings.HasPrefix(r, "https:") {
 				readCloser, err = rs.download(r)
+			} else if strings.HasPrefix(r, "rule:") {
+				readCloser = io.NopCloser(strings.NewReader(r[5:] + "\n"))
 			} else {
 				readCloser, err = rs.openFile(ensureAbsPath(datapath, r))
 			}
@@ -50,14 +52,15 @@ func Parse(client spec.TohClient, name string, ruleset []string, datapath string
 		} else {
 			if strings.HasPrefix(r, "https") {
 				readCloser, err = rs.download(r)
-				reader = readCloser
+			} else if strings.HasPrefix(r, "rule:") {
+				readCloser = io.NopCloser(strings.NewReader(r[5:] + "\n"))
 			} else {
 				readCloser, err = rs.openFile(ensureAbsPath(datapath, r))
-				reader = readCloser
 			}
 			if err != nil {
 				return
 			}
+			reader = readCloser
 		}
 		err = rs.LoadFromReader(*bufio.NewReader(reader))
 		if err != nil {
@@ -86,7 +89,7 @@ func (rs *Ruleset) download(ruleLocation string) (reader io.ReadCloser, err erro
 		return io.NopCloser(bytes.NewReader(b)), nil
 	}
 	logrus.Infof("downloading %s", ruleLocation)
-	b, err := readerFromURL(rs.client, ruleLocation)
+	b, err := readFromURL(rs.client, ruleLocation)
 	if err != nil {
 		return
 	}
@@ -102,7 +105,6 @@ func (rs *Ruleset) openFile(ruleLocation string) (reader io.ReadCloser, err erro
 	}
 	return
 }
-
 func (rs *Ruleset) LoadFromReader(reader bufio.Reader) error {
 	for {
 		l, err := reader.ReadString('\n')
@@ -142,23 +144,38 @@ func (rs *Ruleset) LoadFromReader(reader bufio.Reader) error {
 	return nil
 }
 
-func (rs *Ruleset) SpecialMatch(host string) bool {
-	for _, r := range rs.specialSet {
+func (rs *Ruleset) DirectMatch(host string) bool {
+	if rs == nil {
+		return true
+	}
+	for _, r := range rs.directSet {
 		if host == r || host == fmt.Sprintf("www.%s", r) {
 			return true
 		}
 	}
+	return false
+}
 
-	for _, r := range rs.directSet {
-		if host == r {
-			return false
+func (rs *Ruleset) SpecialMatch(host string) bool {
+	if rs == nil {
+		return false
+	}
+	for _, r := range rs.specialSet {
+		if host == r || host == fmt.Sprintf("www.%s", r) {
+			return true
 		}
 	}
 	return false
 }
 
 func (rs *Ruleset) WildcardMatch(host string) bool {
+	if rs == nil {
+		return false
+	}
 	for _, r := range rs.wildcardSet {
+		if r == "." {
+			return true
+		}
 		if strings.HasSuffix(host, r) || host == strings.Trim(r, ".") {
 			logrus.Debugf("%s matched rule [%s]", host, r)
 			return true
@@ -174,7 +191,11 @@ func (rs *Ruleset) CountryMatch(country string) bool {
 	return slices.Contains(rs.proxyCountrySet, country)
 }
 
-func readerFromURL(client spec.TohClient, url string) ([]byte, error) {
+func trim(s string) string {
+	return strings.Trim(strings.Trim(s, "\n"), " ")
+}
+
+func readFromURL(client spec.TohClient, url string) ([]byte, error) {
 	resp, err := (&http.Client{
 		Timeout: 15 * time.Second,
 		Transport: &http.Transport{
@@ -201,10 +222,6 @@ func readerFromURL(client spec.TohClient, url string) ([]byte, error) {
 		return nil, err
 	}
 	return b, nil
-}
-
-func trim(s string) string {
-	return strings.Trim(strings.Trim(s, "\n"), " ")
 }
 
 func ensureAbsPath(datapath, filename string) string {

@@ -152,7 +152,7 @@ func NewSocks5Server(opts Options) (socks5Server *RulebasedSocks5Server, err err
 	if err != nil {
 		return
 	}
-	logrus.Infof("total %d proxy servers and %d groups loaded", len(socks5Server.servers), len(socks5Server.groups))
+	logrus.Infof("loaded total %d proxy servers and %d groups", len(socks5Server.servers), len(socks5Server.groups))
 	ruleset.ResetCache()
 	return
 }
