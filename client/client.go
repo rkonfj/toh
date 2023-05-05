@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"net"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/miekg/dns"
 	"github.com/rkonfj/toh/spec"
 	"github.com/sirupsen/logrus"
 	"nhooyr.io/websocket"
@@ -18,6 +20,7 @@ import (
 type TohClient struct {
 	options    Options
 	httpClient *http.Client
+	dnsClient  *dns.Client
 }
 
 type Options struct {
@@ -29,24 +32,35 @@ func NewTohClient(options Options) (*TohClient, error) {
 	if _, err := url.ParseRequestURI(options.ServerAddr); err != nil {
 		return nil, err
 	}
-	httpClient := &http.Client{
+	c := &TohClient{
+		options:   options,
+		dnsClient: &dns.Client{},
+	}
+	c.httpClient = &http.Client{
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, network, addr string) (conn net.Conn, err error) {
-				dialer := net.Dialer{}
-				ipAddr, err := spec.ResolveIP(ctx, func(ctx context.Context, addr string) (net.Conn, error) {
-					return dialer.DialContext(ctx, "udp", addr)
-				}, addr)
+				host, port, err := net.SplitHostPort(addr)
 				if err != nil {
-					return nil, err
+					return
 				}
-				return dialer.DialContext(ctx, network, ipAddr)
+
+				ips, err := c.directLookupIP4(host)
+				if err != nil {
+					return
+				}
+				return (&net.Dialer{}).DialContext(ctx, network, fmt.Sprintf("%s:%s", ips[rand.Intn(len(ips))], port))
 			},
 		},
 	}
-	return &TohClient{
-		options:    options,
-		httpClient: httpClient,
-	}, nil
+	return c, nil
+}
+
+func (c *TohClient) DNSExchange(dnServer string, query *dns.Msg) (resp *dns.Msg, err error) {
+	return c.dnsExchange(dnServer, query, false)
+}
+
+func (c *TohClient) LookupIP4(host string) (ips []net.IP, err error) {
+	return c.lookupIP(host, dns.TypeA, false)
 }
 
 func (c *TohClient) DialTCP(ctx context.Context, addr string) (net.Conn, error) {
@@ -65,16 +79,64 @@ func (c *TohClient) DialUDP(ctx context.Context, addr string) (net.Conn, error) 
 	return spec.NewWSStreamConn(&NhooyrWSConn{conn}, &net.UDPAddr{IP: ip, Port: port}), nil
 }
 
+func (c *TohClient) dnsExchange(dnServer string, query *dns.Msg, direct bool) (resp *dns.Msg, err error) {
+	dnsLookupCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
+	if direct {
+		resp, _, err = c.dnsClient.ExchangeContext(dnsLookupCtx, query, dnServer)
+	} else {
+		conn, _err := c.DialUDP(dnsLookupCtx, dnServer)
+		if _err != nil {
+			err = fmt.Errorf("dial error: %s", _err.Error())
+			return
+		}
+
+		defer conn.Close()
+		resp, _, err = c.dnsClient.ExchangeWithConn(query, &dns.Conn{Conn: &spec.PacketConnWrapper{Conn: conn}})
+	}
+	return
+}
+
+func (c *TohClient) lookupIP(host string, t uint16, direct bool) (ips []net.IP, err error) {
+	ip := net.ParseIP(host)
+	if ip != nil {
+		ips = append(ips, ip)
+		return
+	}
+	query := &dns.Msg{}
+	query.SetQuestion(dns.Fqdn(host), t)
+	var resp *dns.Msg
+	for _, dnServer := range []string{"8.8.8.8:53", "1.1.1.1:53", "223.5.5.5:53"} {
+		resp, err = c.dnsExchange(dnServer, query, direct)
+		if err == nil {
+			break
+		}
+	}
+	if err != nil {
+		return
+	}
+	for _, a := range resp.Answer {
+		if a.Header().Rrtype == dns.TypeA {
+			ips = append(ips, a.(*dns.A).A)
+		}
+	}
+	if len(ips) == 0 {
+		err = fmt.Errorf("resolve %s : no type %s was found", host, dns.Type(t))
+	}
+	return
+}
+
+func (c *TohClient) directLookupIP4(host string) (ips []net.IP, err error) {
+	return c.lookupIP(host, dns.TypeA, true)
+}
+
 func (c *TohClient) dial(ctx context.Context, network, addr string) (conn *websocket.Conn, remoteIP net.IP, remotePort int, err error) {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		return
 	}
 
-	dnsLookupCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-
-	ips, err := net.DefaultResolver.LookupIP(dnsLookupCtx, "ip", host)
+	ips, err := c.directLookupIP4(host)
 	if err != nil {
 		return
 	}

@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -200,14 +199,7 @@ func readFromURL(client spec.TohClient, url string) ([]byte, error) {
 		Timeout: 15 * time.Second,
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				ipAddr, err := spec.ResolveIP(ctx, client.DialTCP, addr)
-				if err != nil {
-					if strings.Contains(err.Error(), spec.ErrAuth.Error()) {
-						return nil, errors.New("proxy failed, invalid Toh Key")
-					}
-					return nil, err
-				}
-				return client.DialTCP(ctx, ipAddr)
+				return client.DialTCP(ctx, addr)
 			},
 		},
 	}).Get(url)

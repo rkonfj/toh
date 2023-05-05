@@ -230,11 +230,10 @@ func (s *Socks5Server) serveTemporaryHTTPServer(conn net.Conn) {
 	content := fmt.Sprintf("// give me a star please: https://github.com/rkonfj/toh\n\n"+
 		"function FindProxyForURL(url, host) {\n"+
 		"    if (isPlainHostName(host)) return 'DIRECT'\n"+
-		"    var ip = dnsResolve(host)\n"+
-		"    if (isInNet(ip, '10.0.0.0', '255.0.0.0') ||\n"+
-		"    isInNet(ip, '172.16.0.0', '255.240.0.0') ||\n"+
-		"    isInNet(ip, '192.168.0.0', '255.255.0.0') ||\n"+
-		"    isInNet(ip, '127.0.0.0', '255.255.255.0')) return 'DIRECT'\n"+
+		"    if (isInNet(host, '10.0.0.0', '255.0.0.0') ||\n"+
+		"    isInNet(host, '172.16.0.0', '255.240.0.0') ||\n"+
+		"    isInNet(host, '192.168.0.0', '255.255.0.0') ||\n"+
+		"    isInNet(host, '127.0.0.0', '255.255.255.0')) return 'DIRECT'\n"+
 		"    return 'SOCKS5 %s'\n}\n", pacScriptServer)
 	respHTTP(conn, content)
 	for {

@@ -112,13 +112,7 @@ func (s *RulebasedSocks5Server) updateCache(r *dns.Msg, clientAddr string) *cach
 	var resp *dns.Msg
 	log := logrus.WithField(spec.AppAddr.String(), clientAddr)
 	if server != nil {
-		c, err := server.client.DialUDP(ctx, s.opts.DNSUpstream)
-		if err != nil {
-			logrus.Error(err)
-			return nil
-		}
-		defer c.Close()
-		resp, _, err = s.dnsClient.ExchangeWithConn(r, &dns.Conn{Conn: &spec.PacketConnWrapper{Conn: c}})
+		resp, err = server.client.DNSExchange(s.opts.DNSUpstream, r)
 		if err != nil {
 			logrus.Error(err)
 			return nil

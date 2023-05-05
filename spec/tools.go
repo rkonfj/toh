@@ -2,13 +2,9 @@ package spec
 
 import (
 	"bytes"
-	"context"
 	"encoding/binary"
-	"fmt"
-	"math/rand"
 	"net"
 	"net/http"
-	"time"
 
 	"github.com/sirupsen/logrus"
 )
@@ -42,22 +38,4 @@ func RealIP(r *http.Request) string {
 	tcpAddr, _ := net.ResolveTCPAddr("tcp", r.RemoteAddr)
 	logrus.Debugf("resolve real ip from remote addr: %s", tcpAddr.IP.String())
 	return tcpAddr.IP.String()
-}
-
-func ResolveIP(ctx context.Context, dial Dial, addr string) (a string, err error) {
-	host, port, err := net.SplitHostPort(addr)
-	if err != nil {
-		return
-	}
-	dnsLookupCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-	ips, err := (&net.Resolver{
-		Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
-			return dial(ctx, "8.8.8.8:53")
-		},
-	}).LookupIP(dnsLookupCtx, "ip4", host)
-	if err != nil {
-		return
-	}
-	return fmt.Sprintf("%s:%s", ips[rand.Intn(len(ips))], port), nil
 }

@@ -107,10 +107,6 @@ func NewSocks5Server(opts Options) (socks5Server *RulebasedSocks5Server, err err
 				Timeout: 120 * time.Second,
 				Transport: &http.Transport{
 					DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-						addr, err := spec.ResolveIP(ctx, c.DialTCP, addr)
-						if err != nil {
-							return nil, err
-						}
 						return c.DialTCP(ctx, addr)
 					},
 				},

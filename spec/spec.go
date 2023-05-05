@@ -14,6 +14,7 @@ import (
 type TohClient interface {
 	DialTCP(ctx context.Context, address string) (net.Conn, error)
 	DialUDP(ctx context.Context, address string) (net.Conn, error)
+	LookupIP4(host string) (ips []net.IP, err error)
 }
 
 // WSConn websocket connection which used to read, write and close data
