@@ -60,15 +60,15 @@ domainMatch:
 	}
 
 	// else, match server and return
-	directGroups := make(map[string]struct{})
+	directServers := make(map[string]struct{})
 	for _, s := range s.servers {
 		if s.ruleset.DirectMatch(host) {
-			directGroups[s.name] = struct{}{}
+			directServers[s.name] = struct{}{}
 		}
 	}
 
 	for _, s := range s.servers {
-		if _, ok := directGroups[s.name]; ok {
+		if _, ok := directServers[s.name]; ok {
 			continue
 		}
 		if s.ruleset.SpecialMatch(host) {
@@ -77,7 +77,7 @@ domainMatch:
 	}
 
 	for _, s := range s.servers {
-		if _, ok := directGroups[s.name]; ok {
+		if _, ok := directServers[s.name]; ok {
 			continue
 		}
 		if s.ruleset.WildcardMatch(host) {

@@ -201,10 +201,12 @@ func (s *RulebasedSocks5Server) dialUDP(ctx context.Context, addr string) (diale
 }
 
 func selectServer(servers []*Server) *Server {
-	sort.Slice(servers, func(i, j int) bool {
-		return servers[i].latency < servers[j].latency
+	s := make([]*Server, len(servers))
+	copy(s, servers)
+	sort.Slice(s, func(i, j int) bool {
+		return s[i].latency < s[j].latency
 	})
-	return servers[0]
+	return s[0]
 }
 
 func openGeoip2(httpClient *http.Client, dataPath, geoip2Path string) (*geoip2.Reader, error) {
