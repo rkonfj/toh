@@ -11,4 +11,4 @@ FROM alpine:3.17
 WORKDIR /root
 COPY --from=builder /toh/toh /usr/bin/toh
 ENTRYPOINT ["/usr/bin/toh"]
-CMD ["server"]
+CMD ["serve"]
