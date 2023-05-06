@@ -211,16 +211,11 @@ func openGeoip2(httpClient *http.Client, dataPath, geoip2Path string) (*geoip2.R
 	db, err := geoip2.Open(getGeoip2Path(httpClient, dataPath, geoip2Path))
 	if err != nil {
 		if strings.Contains(err.Error(), "invalid MaxMind") {
-			logrus.Info("removed invalid country.mmdb file")
 			os.Remove(geoip2Path)
-			return openGeoip2(httpClient, dataPath,
-				getGeoip2Path(httpClient, dataPath, ""))
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return nil, err
 		}
-		if errors.Is(err, os.ErrNotExist) {
-			return openGeoip2(httpClient, dataPath,
-				getGeoip2Path(httpClient, dataPath, ""))
-		}
-		return nil, err
+		return openGeoip2(httpClient, dataPath, getGeoip2Path(httpClient, dataPath, ""))
 	}
 	return db, nil
 }
@@ -232,11 +227,11 @@ func getGeoip2Path(hc *http.Client, dataPath, geoip2Path string) string {
 		}
 		return filepath.Join(dataPath, geoip2Path)
 	}
-	logrus.Infof("downloading country.mmdb to %s. this can take up to 2m0s", dataPath)
+	logrus.Infof("downloading country.mmdb to %s (this can take up to 2m0s)", dataPath)
 	mmdbPath := filepath.Join(dataPath, "country.mmdb")
 	resp, err := hc.Get("https://github.com/Dreamacro/maxmind-geoip/releases/latest/download/Country.mmdb")
 	if err != nil {
-		logrus.Error(err)
+		logrus.Error("download country.mmdb error: ", err.Error())
 		return mmdbPath
 	}
 	defer resp.Body.Close()
