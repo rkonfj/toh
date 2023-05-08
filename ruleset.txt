@@ -29,6 +29,9 @@
 .redditmedia.com
 .redd.it
 
+! Android
+.android.com
+
 ! MISC
 .termux.com
 .medium.com
