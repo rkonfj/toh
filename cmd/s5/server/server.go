@@ -36,6 +36,7 @@ type Options struct {
 	Cfg           Config
 	AdvertiseAddr string
 	DataRoot      string
+	DNSFake       string
 	DNSListen     string
 	DNSUpstream   string
 	DNSEvict      time.Duration
@@ -239,6 +240,11 @@ func (s *RulebasedSocks5Server) dialTCP(ctx context.Context, addr string) (diale
 }
 
 func (s *RulebasedSocks5Server) dialUDP(ctx context.Context, addr string) (dialerName string, conn net.Conn, err error) {
+	if len(s.opts.DNSUpstream) > 0 && strings.Contains(addr, s.opts.DNSFake) {
+		dialerName = "direct"
+		conn, err = s.defaultDialer.Dial("udp", s.opts.DNSListen)
+		return
+	}
 	return s.dial(ctx, addr, "udp")
 }
 
