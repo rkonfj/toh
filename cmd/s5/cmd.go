@@ -22,6 +22,7 @@ func init() {
 		RunE:  startAction,
 	}
 	Cmd.Flags().StringP("config", "c", "", "socks5 server config file (default is $HOME/.config/toh/socks5.yml)")
+	Cmd.Flags().String("advertise-addr", "", "advertised socks5 address (default is listen address)")
 	Cmd.Flags().String("dns", "", "dns upstream to use (leave blank to disable local dns)")
 	Cmd.Flags().String("dns-listen", "0.0.0.0:2053", "local dns")
 	Cmd.Flags().String("dns-evict", "2h", "local dns cache evict duration")
@@ -40,6 +41,11 @@ func startAction(cmd *cobra.Command, args []string) error {
 }
 
 func processOptions(cmd *cobra.Command) (opts server.Options, err error) {
+	opts.AdvertiseAddr, err = cmd.Flags().GetString("advertise-addr")
+	if err != nil {
+		return
+	}
+
 	opts.DNSUpstream, err = cmd.Flags().GetString("dns")
 	if err != nil {
 		return

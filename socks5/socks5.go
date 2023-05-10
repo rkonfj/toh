@@ -3,6 +3,7 @@ package socks5
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -17,6 +18,8 @@ import (
 
 type Options struct {
 	Listen               string
+	AdvertiseIP          string
+	AdvertisePort        uint16
 	TCPDialContext       func(ctx context.Context, addr string) (dialerName string, conn net.Conn, err error)
 	UDPDialContext       func(ctx context.Context, addr string) (dialerName string, conn net.Conn, err error)
 	TrafficEventConsumer func(e *TrafficEvent)
@@ -27,11 +30,31 @@ type Socks5Server struct {
 	trafficEventChan chan *TrafficEvent
 }
 
-func NewSocks5Server(opts Options) *Socks5Server {
-	return &Socks5Server{
+func NewSocks5Server(opts Options) (s *Socks5Server, err error) {
+	ipPort := strings.Split(opts.Listen, ":")
+	if len(ipPort) != 2 {
+		err = errors.New("listen address format error")
+		return
+	}
+	if opts.AdvertiseIP == "" {
+		if ipPort[0] == "0.0.0.0" || ipPort[0] == "" {
+			opts.AdvertiseIP = "127.0.0.1"
+		} else {
+			opts.AdvertiseIP = ipPort[0]
+		}
+	}
+	if opts.AdvertisePort == 0 {
+		port, err := strconv.Atoi(ipPort[1])
+		if err != nil {
+			return nil, err
+		}
+		opts.AdvertisePort = uint16(port)
+	}
+	s = &Socks5Server{
 		opts:             opts,
 		trafficEventChan: make(chan *TrafficEvent, 4096),
 	}
+	return
 }
 
 func (s *Socks5Server) Run() error {
@@ -39,9 +62,18 @@ func (s *Socks5Server) Run() error {
 	if err != nil {
 		return err
 	}
-	go s.startTrafficEventConsumeDaemon()
-	logrus.Infof("listen on %s for socks5 now", s.opts.Listen)
 	defer l.Close()
+	udpL, err := net.ListenPacket("udp", s.opts.Listen)
+	if err != nil {
+		return err
+	}
+	defer udpL.Close()
+
+	logrus.Infof("listen on %s for socks5 now", s.opts.Listen)
+
+	go s.startTrafficEventConsumeLoop()
+	go s.startUDPListenLoop(udpL)
+
 	for {
 		conn, err := l.Accept()
 		if err != nil {
@@ -49,30 +81,23 @@ func (s *Socks5Server) Run() error {
 		}
 		go func() {
 			ctx := context.WithValue(context.Background(), spec.AppAddr, conn.RemoteAddr().String())
-			dialerName, remoteAddr, netConn, udpConn := s.handshake(ctx, conn)
-			var c1, c2 net.Conn
-			var network string
-			if udpConn == nil {
-				c1, c2 = conn, netConn
-				network = "tcp"
-			} else {
-				c1, c2 = udpConn, netConn
-				network = "udp"
-			}
-			lbc, rbc := s.pipe(c1, c2)
-			s.trafficEventChan <- &TrafficEvent{
-				DialerName: dialerName,
-				Network:    network,
-				LocalAddr:  conn.RemoteAddr().String(),
-				RemoteAddr: remoteAddr,
-				In:         lbc,
-				Out:        rbc,
+			dialerName, remoteAddr, netConn := s.handshake(ctx, conn)
+			if netConn != nil {
+				lbc, rbc := s.pipe(conn, netConn)
+				s.trafficEventChan <- &TrafficEvent{
+					DialerName: dialerName,
+					Network:    "tcp",
+					LocalAddr:  conn.RemoteAddr().String(),
+					RemoteAddr: remoteAddr,
+					In:         lbc,
+					Out:        rbc,
+				}
 			}
 		}()
 	}
 }
 
-func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (dialerName, remoteAddr string, netConn, udpConn net.Conn) {
+func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (dialerName, remoteAddr string, netConn net.Conn) {
 	log := logrus.WithField(spec.AppAddr.String(), ctx.Value(spec.AppAddr))
 	buf := make([]byte, 1024)
 	defer func() {
@@ -178,23 +203,9 @@ func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (dialerName
 		return
 	// 2. UDP ASSOCIATE
 	case 3:
-		dialerName, netConn, err = s.opts.UDPDialContext(ctx, remoteAddr)
-		if err != nil {
-			log.Errorf("socks5 establishing udp://%s error: %s", remoteAddr, err)
-			respHostUnreachable(conn)
-			return
-		}
-		udpConn, err = net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(0, 0, 0, 0), Port: 0})
-		if err != nil {
-			log.Debug("handle command error @UDP listener")
-			respGeneralErr(conn)
-			return
-		}
-		conn.Write([]byte{0x05, 0x00, 0x00, 0x01})
-		addrPort := netip.MustParseAddrPort(udpConn.LocalAddr().String())
-		ip := addrPort.Addr().As4()
-		conn.Write(ip[:])
-		conn.Write(spec.Uint16ToBytes(addrPort.Port()))
+		conn.Write([]byte{5, 0, 0, 1})
+		conn.Write(net.ParseIP(s.opts.AdvertiseIP).To4())
+		conn.Write(spec.Uint16ToBytes(s.opts.AdvertisePort))
 		return
 	// 3. do not support BIND now
 	default:
@@ -222,11 +233,7 @@ func (s *Socks5Server) pipe(conn, rConn net.Conn) (lbc, rbc int64) {
 }
 
 func (s *Socks5Server) serveTemporaryHTTPServer(conn net.Conn) {
-	listenAddr := strings.Split(s.opts.Listen, ":")
-	pacScriptServer := s.opts.Listen
-	if listenAddr[0] == "0.0.0.0" || listenAddr[0] == "" {
-		pacScriptServer = fmt.Sprintf("127.0.0.1:%s", listenAddr[1])
-	}
+	pacScriptServer := fmt.Sprintf("%s:%d", s.opts.AdvertiseIP, s.opts.AdvertisePort)
 	content := fmt.Sprintf("// give me a star please: https://github.com/rkonfj/toh\n\n"+
 		"function FindProxyForURL(url, host) {\n"+
 		"    if (isPlainHostName(host)) return 'DIRECT'\n"+
@@ -256,10 +263,6 @@ func respHTTP(conn net.Conn, content string) {
 }
 func respHostUnreachable(conn net.Conn) {
 	conn.Write([]byte{0x05, 0x04, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
-}
-
-func respGeneralErr(conn net.Conn) {
-	conn.Write([]byte{0x05, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 }
 
 func respNotSupported(conn net.Conn) {

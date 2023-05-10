@@ -11,7 +11,7 @@ func (s *Socks5Server) SetTrafficEventConsumer(c TrafficEventConsumer) {
 	s.opts.TrafficEventConsumer = c
 }
 
-func (s *Socks5Server) startTrafficEventConsumeDaemon() {
+func (s *Socks5Server) startTrafficEventConsumeLoop() {
 	go func() {
 		for e := range s.trafficEventChan {
 			if s.opts.TrafficEventConsumer != nil {
