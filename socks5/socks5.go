@@ -100,11 +100,6 @@ func (s *Socks5Server) Run() error {
 func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (dialerName, remoteAddr string, netConn net.Conn) {
 	log := logrus.WithField(spec.AppAddr.String(), ctx.Value(spec.AppAddr))
 	buf := make([]byte, 1024)
-	defer func() {
-		if netConn == nil {
-			conn.Close()
-		}
-	}()
 
 	// auth
 	n, err := conn.Read(buf[:2])

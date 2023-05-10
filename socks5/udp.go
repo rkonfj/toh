@@ -12,25 +12,26 @@ import (
 )
 
 func (s *Socks5Server) startUDPListenLoop(l net.PacketConn) {
-	buf := make([]byte, 16*1024)
 	for {
+		buf := make([]byte, 16*1024)
 		n, clientAddr, err := l.ReadFrom(buf)
 		if err != nil {
 			logrus.Error(err)
 			break
 		}
 
-		go s.pipeSocks5UDP(buf[:n], l, clientAddr)
+		go s.pipeSocks5UDP(buf, n, l, clientAddr)
 	}
 }
 
-func (s *Socks5Server) pipeSocks5UDP(packet []byte, udpConn net.PacketConn, clientAddr net.Addr) {
-	addr, payload, err := decodeSocks5Packet(packet)
+func (s *Socks5Server) pipeSocks5UDP(buf []byte, bc int, udpConn net.PacketConn, clientAddr net.Addr) {
+	packet := buf[:bc]
+	host, port, payload, err := decodeSocks5Packet(packet)
 	if err != nil {
 		logrus.Error(err)
 		return
 	}
-
+	addr := fmt.Sprintf("%s:%d", host, port)
 	ctx := context.WithValue(context.Background(), spec.AppAddr, clientAddr.String())
 	dialerName, conn, err := s.opts.UDPDialContext(ctx, addr)
 	if err != nil {
@@ -45,7 +46,6 @@ func (s *Socks5Server) pipeSocks5UDP(packet []byte, udpConn net.PacketConn, clie
 		return
 	}
 
-	buf := make([]byte, 16*1024)
 	n, err := conn.Read(buf)
 	if err != nil {
 		logrus.Error(err)
@@ -54,10 +54,10 @@ func (s *Socks5Server) pipeSocks5UDP(packet []byte, udpConn net.PacketConn, clie
 
 	udpPacket := bytes.Join([][]byte{
 		{0, 0, 0, 1},
-		net.ParseIP(s.opts.AdvertiseIP).To4(),
-		spec.Uint16ToBytes(s.opts.AdvertisePort),
+		net.ParseIP(host).To4(),
+		spec.Uint16ToBytes(port),
 		buf[:n]}, []byte{})
-	_, err = udpConn.WriteTo(udpPacket, clientAddr)
+	n, err = udpConn.WriteTo(udpPacket, clientAddr)
 	if err != nil {
 		logrus.Error(err)
 		return
@@ -73,7 +73,7 @@ func (s *Socks5Server) pipeSocks5UDP(packet []byte, udpConn net.PacketConn, clie
 	}
 }
 
-func decodeSocks5Packet(packet []byte) (addr string, payload []byte, err error) {
+func decodeSocks5Packet(packet []byte) (host string, port uint16, payload []byte, err error) {
 	errInvalidDatagram := errors.New("invalid socks5 udp datagram")
 	if len(packet) < 4 {
 		err = errInvalidDatagram
@@ -96,23 +96,9 @@ func decodeSocks5Packet(packet []byte) (addr string, payload []byte, err error) 
 			err = errInvalidDatagram
 			return
 		}
-		host := net.IPv4(packet[4], packet[5], packet[6], packet[7]).String()
-		port := spec.BytesToUint16(packet[8 : 8+2])
-		addr = fmt.Sprintf("%s:%d", host, port)
+		host = net.IPv4(packet[4], packet[5], packet[6], packet[7]).String()
+		port = spec.BytesToUint16(packet[8 : 8+2])
 		payload = packet[4+4+2:]
-	case 3:
-		if len(packet) < 4+1 {
-			err = errInvalidDatagram
-			return
-		}
-		if len(packet) < 4+int(packet[4])+2 {
-			err = errInvalidDatagram
-			return
-		}
-		host := string(packet[5 : 5+packet[4]])
-		port := spec.BytesToUint16(packet[5+packet[4] : 5+packet[4]+2])
-		addr = fmt.Sprintf("%s:%d", host, port)
-		payload = packet[4+int(packet[4])+2:]
 	default:
 		err = errors.New("discard unsupport ATYP")
 		return
