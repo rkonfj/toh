@@ -59,7 +59,7 @@ func (c *dnsCache) Set(key string, entry *cacheEntry) {
 		if _, ok := c.hostCache[ip]; !ok {
 			c.hostCache[ip] = &hostCacheEntry{expire: entry.expire}
 		}
-		c.hostCache[ip].hosts = append(c.hostCache[ip].hosts, host)
+		c.hostCache[ip].hosts = append(c.hostCache[ip].hosts, strings.Trim(host, "."))
 	}
 }
 
