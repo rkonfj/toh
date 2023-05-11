@@ -12,7 +12,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/miekg/dns"
@@ -29,7 +28,7 @@ type Config struct {
 	Geoip2  string        `yaml:"geoip2"`
 	Listen  string        `yaml:"listen"`
 	Servers []TohServer   `yaml:"servers"`
-	Groups  []ServerGroup `yaml:"groups"`
+	Groups  []ServerGroup `yaml:"groups,omitempty"`
 }
 
 type Options struct {
@@ -63,8 +62,7 @@ type RulebasedSocks5Server struct {
 	defaultDialer  net.Dialer
 	geoip2db       *geoip2.Reader
 	dnsClient      *dns.Client
-	dnsCache       map[string]*cacheEntry
-	dnsCacheLock   sync.RWMutex
+	dnsCache       *dnsCache
 	dnsCacheTicker *time.Ticker
 }
 
@@ -84,12 +82,15 @@ type Group struct {
 
 func NewSocks5Server(opts Options) (socks5Server *RulebasedSocks5Server, err error) {
 	socks5Server = &RulebasedSocks5Server{
-		opts:           opts,
-		servers:        []*Server{},
-		groups:         []*Group{},
-		defaultDialer:  net.Dialer{},
-		dnsClient:      &dns.Client{},
-		dnsCache:       make(map[string]*cacheEntry),
+		opts:          opts,
+		servers:       []*Server{},
+		groups:        []*Group{},
+		defaultDialer: net.Dialer{},
+		dnsClient:     &dns.Client{},
+		dnsCache: &dnsCache{
+			cache:     make(map[string]*cacheEntry),
+			hostCache: make(map[string]*hostCacheEntry),
+		},
 		dnsCacheTicker: time.NewTicker(time.Duration(math.Max(float64(opts.DNSEvict/20), float64(time.Minute)))),
 	}
 

@@ -13,36 +13,78 @@ import (
 )
 
 type cacheEntry struct {
-	Response dns.Msg
-	Expire   time.Time
+	response dns.Msg
+	expire   time.Time
 }
 
-func (c *RulebasedSocks5Server) getDNSCahce(key string) (*cacheEntry, bool) {
-	c.dnsCacheLock.RLock()
-	defer c.dnsCacheLock.RUnlock()
-	entry, ok := c.dnsCache[key]
+type hostCacheEntry struct {
+	hosts  []string
+	expire time.Time
+}
+
+type dnsCache struct {
+	lock      sync.RWMutex
+	cache     map[string]*cacheEntry
+	hostCache map[string]*hostCacheEntry
+}
+
+func (c *dnsCache) Hosts(ip string) ([]string, bool) {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+	if entry, ok := c.hostCache[ip]; ok {
+		return entry.hosts, ok
+	}
+	return nil, false
+}
+
+func (c *dnsCache) Get(key string) (*cacheEntry, bool) {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+	entry, ok := c.cache[key]
 	return entry, ok
 }
 
-func (c *RulebasedSocks5Server) setDNSCache(key string, entry *cacheEntry) {
-	c.dnsCacheLock.Lock()
-	defer c.dnsCacheLock.Unlock()
-	c.dnsCache[key] = entry
+func (c *dnsCache) Set(key string, entry *cacheEntry) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	c.cache[key] = entry
+	host := entry.response.Question[0].Name
+	for _, a := range entry.response.Answer {
+		var ip string
+		if a.Header().Rrtype == dns.TypeA {
+			ip = a.(*dns.A).A.To4().String()
+		} else if a.Header().Rrtype == dns.TypeAAAA {
+			ip = a.(*dns.AAAA).AAAA.String()
+		}
+		if _, ok := c.hostCache[ip]; !ok {
+			c.hostCache[ip] = &hostCacheEntry{expire: entry.expire}
+		}
+		c.hostCache[ip].hosts = append(c.hostCache[ip].hosts, host)
+	}
 }
 
 func (c *RulebasedSocks5Server) dnsCacheEvictLoop() {
 	for range c.dnsCacheTicker.C {
 		expiredKeys := []string{}
-		c.dnsCacheLock.Lock()
-		for k, v := range c.dnsCache {
-			if time.Now().After(v.Expire.Add(c.opts.DNSEvict)) {
+		c.dnsCache.lock.Lock()
+		for k, v := range c.dnsCache.cache {
+			if time.Now().After(v.expire.Add(c.opts.DNSEvict)) {
 				expiredKeys = append(expiredKeys, k)
 			}
 		}
 		for _, k := range expiredKeys {
-			delete(c.dnsCache, k)
+			delete(c.dnsCache.cache, k)
 		}
-		c.dnsCacheLock.Unlock()
+		expiredKeys = []string{}
+		for k, v := range c.dnsCache.hostCache {
+			if time.Now().After(v.expire.Add(c.opts.DNSEvict)) {
+				expiredKeys = append(expiredKeys, k)
+			}
+		}
+		for _, k := range expiredKeys {
+			delete(c.dnsCache.hostCache, k)
+		}
+		c.dnsCache.lock.Unlock()
 	}
 }
 
@@ -85,19 +127,19 @@ func (s *RulebasedSocks5Server) dnsQuery(w dns.ResponseWriter, r *dns.Msg) {
 	if len(r.Question) > 1 {
 		logrus.Info("multiple DNS questions are not supported")
 	}
-	entry, ok := s.getDNSCahce(r.Question[0].String())
+	entry, ok := s.dnsCache.Get(r.Question[0].String())
 	if ok {
-		entry.Response.Id = r.Id
-		w.WriteMsg(&entry.Response)
-		if time.Now().After(entry.Expire) {
+		entry.response.Id = r.Id
+		w.WriteMsg(&entry.response)
+		if time.Now().After(entry.expire) {
 			go s.updateCache(r, w.RemoteAddr().String())
 		}
 		return
 	}
 	entry = s.updateCache(r, w.RemoteAddr().String())
 	if entry != nil {
-		entry.Response.Id = r.Id
-		w.WriteMsg(&entry.Response)
+		entry.response.Id = r.Id
+		w.WriteMsg(&entry.response)
 	}
 }
 
@@ -138,9 +180,9 @@ func (s *RulebasedSocks5Server) updateCache(r *dns.Msg, clientAddr string) *cach
 		}
 	}
 	entry := &cacheEntry{
-		Response: *resp,
-		Expire:   time.Now().Add(time.Duration(maxTTL) * time.Second),
+		response: *resp,
+		expire:   time.Now().Add(time.Duration(maxTTL) * time.Second),
 	}
-	s.setDNSCache(r.Question[0].String(), entry)
+	s.dnsCache.Set(r.Question[0].String(), entry)
 	return entry
 }
