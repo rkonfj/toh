@@ -146,28 +146,25 @@ func (s *RulebasedSocks5Server) dnsQuery(w dns.ResponseWriter, r *dns.Msg) {
 func (s *RulebasedSocks5Server) updateCache(r *dns.Msg, clientAddr string) *cacheEntry {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	server, group, err := s.selectProxyServer(strings.Trim(r.Question[0].Name, "."))
-	if err != nil {
-		logrus.Error(err)
+	proxy := s.selectProxyServer(strings.Trim(r.Question[0].Name, "."))
+	if proxy.err != nil {
+		logrus.Error(proxy.err)
 		return nil
 	}
 	var resp *dns.Msg
 	log := logrus.WithField(spec.AppAddr.String(), clientAddr)
-	if server != nil {
-		resp, err = server.client.DNSExchange(s.opts.DNSUpstream, r)
-		if err != nil {
-			logrus.Error(err)
+	if proxy.ok() {
+		resp, proxy.err = proxy.server.client.DNSExchange(s.opts.DNSUpstream, r)
+		if proxy.err != nil {
+			logrus.Error(proxy.err)
 			return nil
 		}
-		proxyId := server.name
-		if group != "" {
-			proxyId = group + "." + server.name
-		}
-		log.Infof("dns query %s type %s using %s latency %s", r.Question[0].Name, dns.Type(r.Question[0].Qtype).String(), proxyId, server.latency)
+		log.Infof("dns query %s type %s using %s latency %s",
+			r.Question[0].Name, dns.Type(r.Question[0].Qtype).String(), proxy.id(), proxy.server.latency)
 	} else {
-		resp, _, err = s.dnsClient.ExchangeContext(ctx, r, s.opts.DNSUpstream)
-		if err != nil {
-			logrus.Error(err)
+		resp, _, proxy.err = s.dnsClient.ExchangeContext(ctx, r, s.opts.DNSUpstream)
+		if proxy.err != nil {
+			logrus.Error(proxy.err)
 			return nil
 		}
 		log.Infof("dns query %s type %s using direct", r.Question[0].Name, dns.Type(r.Question[0].Qtype).String())

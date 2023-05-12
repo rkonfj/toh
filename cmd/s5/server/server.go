@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"net"
@@ -217,28 +218,28 @@ func (s *RulebasedSocks5Server) printRulesetStats() {
 
 func (s *RulebasedSocks5Server) dial(ctx context.Context, addr, network string) (
 	dialerName string, conn net.Conn, err error) {
-	host, _, err := net.SplitHostPort(addr)
+	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		return
 	}
 
-	server, group, err := s.selectProxyServer(host)
-	if err != nil {
+	proxy := s.selectProxyServer(host)
+	if proxy.err != nil {
 		return
 	}
 
 	log := logrus.WithField(spec.AppAddr.String(), ctx.Value(spec.AppAddr))
-	if server != nil {
-		dialerName = server.name
-		proxyId := server.name
-		if group != "" {
-			proxyId = group + "." + server.name
+	if proxy.ok() {
+		dialerName = proxy.server.name
+		access := addr
+		if proxy.reverseResolutionHost != nil {
+			access = fmt.Sprintf("%s:%s", *proxy.reverseResolutionHost, port)
 		}
-		log.Infof("%s://%s using %s latency %s", network, addr, proxyId, server.latency)
+		log.Infof("%s://%s using %s latency %s", network, access, proxy.id(), proxy.server.latency)
 		if network == "tcp" {
-			conn, err = server.client.DialTCP(ctx, addr)
+			conn, err = proxy.server.client.DialTCP(ctx, addr)
 		} else if network == "udp" {
-			conn, err = server.client.DialUDP(ctx, addr)
+			conn, err = proxy.server.client.DialUDP(ctx, addr)
 		} else {
 			err = errors.New("unsupported network " + network)
 		}
