@@ -17,12 +17,13 @@ var Cmd *cobra.Command
 func init() {
 	Cmd = &cobra.Command{
 		Use:   "s5",
-		Short: "Socks5 proxy server act as ToH client",
+		Short: "Socks5+http proxy server act as ToH client",
 		Args:  cobra.NoArgs,
 		RunE:  startAction,
 	}
-	Cmd.Flags().StringP("config", "c", "", "socks5 server config file (default is $HOME/.config/toh/socks5.yml)")
-	Cmd.Flags().String("advertise-addr", "", "advertised socks5 address (default is listen address)")
+	Cmd.Flags().StringP("config", "c", "", "config file (default is $HOME/.config/toh/socks5.yml)")
+	Cmd.Flags().String("advertise-ip", "", "advertised server ip (default is listen ip)")
+	Cmd.Flags().Uint16("advertise-port", 0, "advertised server port (default is listen port)")
 	Cmd.Flags().String("dns", "", "dns upstream to use (leave blank to disable local dns)")
 	Cmd.Flags().String("dns-listen", "0.0.0.0:2053", "local dns")
 	Cmd.Flags().String("dns-evict", "2h", "local dns cache evict duration")
@@ -43,7 +44,12 @@ func startAction(cmd *cobra.Command, args []string) error {
 }
 
 func processOptions(cmd *cobra.Command) (opts server.Options, err error) {
-	opts.AdvertiseAddr, err = cmd.Flags().GetString("advertise-addr")
+	opts.AdvertiseIP, err = cmd.Flags().GetString("advertise-ip")
+	if err != nil {
+		return
+	}
+
+	opts.AdvertisePort, err = cmd.Flags().GetUint16("advertise-port")
 	if err != nil {
 		return
 	}

@@ -62,7 +62,7 @@ func (s *Socks5Server) Run() error {
 	}
 	defer udpL.Close()
 
-	logrus.Infof("listen on %s for socks5 now", s.opts.Listen)
+	logrus.Infof("listen on %s for socks5+http now", s.opts.Listen)
 
 	go s.startTrafficEventConsumeLoop()
 	go s.startUDPListenLoop(udpL)

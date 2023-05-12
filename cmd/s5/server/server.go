@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -34,7 +33,8 @@ type Config struct {
 
 type Options struct {
 	Cfg           Config
-	AdvertiseAddr string
+	AdvertiseIP   string
+	AdvertisePort uint16
 	DataRoot      string
 	DNSFake       string
 	DNSListen     string
@@ -119,26 +119,18 @@ func NewSocks5Server(opts Options) (socks5Server *RulebasedSocks5Server, err err
 func (s *RulebasedSocks5Server) Run() error {
 	opts := socks5.Options{
 		Listen:               s.opts.Cfg.Listen,
+		AdvertiseIP:          s.opts.AdvertiseIP,
+		AdvertisePort:        s.opts.AdvertisePort,
 		TCPDialContext:       s.dialTCP,
 		UDPDialContext:       s.dialUDP,
 		TrafficEventConsumer: logTrafficEvent,
 	}
-	if s.opts.AdvertiseAddr != "" {
-		host, _port, err := net.SplitHostPort(s.opts.AdvertiseAddr)
-		if err != nil {
-			return err
-		}
-		port, err := strconv.Atoi(_port)
-		if err != nil {
-			return err
-		}
-		opts.AdvertiseIP = host
-		opts.AdvertisePort = uint16(port)
-	}
+
 	ss, err := socks5.NewSocks5Server(opts)
 	if err != nil {
 		return err
 	}
+
 	go s.runDNSIfNeeded()
 	return ss.Run()
 }

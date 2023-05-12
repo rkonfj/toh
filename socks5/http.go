@@ -2,12 +2,15 @@ package socks5
 
 import (
 	"bufio"
+	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"strconv"
 
+	"github.com/rkonfj/toh/spec"
 	"github.com/sirupsen/logrus"
 )
 
@@ -31,7 +34,11 @@ type protocolDetectionConnWrapper struct {
 func (c *protocolDetectionConnWrapper) Read(b []byte) (n int, err error) {
 	if c.b != nil {
 		n = copy(b, c.b)
-		c.b = nil
+		if n < len(c.b) {
+			c.b = c.b[n:]
+		} else {
+			c.b = nil
+		}
 		return
 	}
 	return c.Conn.Read(b)
@@ -39,7 +46,12 @@ func (c *protocolDetectionConnWrapper) Read(b []byte) (n int, err error) {
 
 func (s *HTTPProxyServer) handle(b []byte, originConn net.Conn) {
 	conn := &protocolDetectionConnWrapper{Conn: originConn, b: b}
-	defer conn.Close()
+	closeConn := true
+	defer func() {
+		if closeConn {
+			conn.Close()
+		}
+	}()
 
 	reader := bufio.NewReader(conn)
 
@@ -52,17 +64,15 @@ func (s *HTTPProxyServer) handle(b []byte, originConn net.Conn) {
 			logrus.Error(err)
 			break
 		}
-
-		if request.Method == http.MethodConnect {
-			// https_proxy
-			continue
-		}
-
+		addr := request.Host
 		host, port, err := net.SplitHostPort(request.Host)
 		if err != nil {
-			logrus.Error(err)
-			continue
+			host = request.URL.Host
+			port = "80"
+			addr += ":80"
 		}
+
+		// pac script
 		if ip := net.ParseIP(host); ip != nil &&
 			(ip.IsLoopback() || (ip.IsPrivate() && port ==
 				fmt.Sprintf("%d", s.opts.AdvertisePort))) {
@@ -70,9 +80,50 @@ func (s *HTTPProxyServer) handle(b []byte, originConn net.Conn) {
 			continue
 		}
 
-		// http proxy
+		ctx := context.WithValue(context.Background(), spec.AppAddr, conn.RemoteAddr().String())
+		_, httpConn, err := s.opts.TCPDialContext(ctx, addr)
+		if err != nil {
+			logrus.Error(err)
+			continue
+		}
 
+		if request.Method == http.MethodConnect {
+			// https_proxy
+			_, httpConn, err := s.opts.TCPDialContext(ctx, addr)
+			if err != nil {
+				logrus.Error(err)
+				continue
+			}
+			_, err = conn.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
+			if err != nil {
+				logrus.Error(err)
+				continue
+			}
+			go pipe(httpConn, conn)
+			closeConn = false
+			break
+		}
+
+		// http proxy
+		buf := bytes.Buffer{}
+		request.Header.Del("Proxy-Connection")
+		err = request.Write(&buf)
+		if err != nil {
+			logrus.Error(err)
+			continue
+		}
+
+		go pipe(httpConn, &protocolDetectionConnWrapper{Conn: conn, b: buf.Bytes()})
+		closeConn = false
+		break
 	}
+}
+
+func pipe(l, r io.ReadWriteCloser) {
+	defer l.Close()
+	defer r.Close()
+	go io.Copy(l, r)
+	io.Copy(r, l)
 }
 
 func (s *HTTPProxyServer) responsePacScript(w io.Writer) {
