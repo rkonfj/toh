@@ -124,15 +124,15 @@ func (s *RulebasedSocks5Server) Run() error {
 		TrafficEventConsumer: logTrafficEvent,
 	}
 	if s.opts.AdvertiseAddr != "" {
-		ipPort := strings.Split(s.opts.AdvertiseAddr, ":")
-		if len(ipPort) != 2 {
-			return errors.New("advertise address format error")
-		}
-		port, err := strconv.Atoi(ipPort[1])
+		host, _port, err := net.SplitHostPort(s.opts.AdvertiseAddr)
 		if err != nil {
 			return err
 		}
-		opts.AdvertiseIP = ipPort[0]
+		port, err := strconv.Atoi(_port)
+		if err != nil {
+			return err
+		}
+		opts.AdvertiseIP = host
 		opts.AdvertisePort = uint16(port)
 	}
 	ss, err := socks5.NewSocks5Server(opts)

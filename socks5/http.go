@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	"strconv"
-	"strings"
 
 	"github.com/sirupsen/logrus"
 )
@@ -59,10 +58,18 @@ func (s *HTTPProxyServer) handle(b []byte, originConn net.Conn) {
 			continue
 		}
 
-		if strings.Contains(request.Host, s.opts.AdvertiseIP) {
+		host, port, err := net.SplitHostPort(request.Host)
+		if err != nil {
+			logrus.Error(err)
+			continue
+		}
+		if ip := net.ParseIP(host); ip != nil &&
+			(ip.IsLoopback() || (ip.IsPrivate() && port ==
+				fmt.Sprintf("%d", s.opts.AdvertisePort))) {
 			s.responsePacScript(conn)
 			continue
 		}
+
 		// http proxy
 
 	}
@@ -78,7 +85,7 @@ func (s *HTTPProxyServer) responsePacScript(w io.Writer) {
 		"    isInNet(host, '192.168.0.0', '255.255.0.0') ||\n"+
 		"    isInNet(host, '127.0.0.0', '255.255.255.0')) return 'DIRECT'\n"+
 		"    return 'SOCKS5 %s'\n}\n", pacScriptServer)
-	w.Write([]byte("HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: "))
+	w.Write([]byte("HTTP/1.1 200 OK\r\nContent-Length: "))
 	w.Write([]byte(strconv.Itoa(len(content))))
 	w.Write([]byte("\r\n\r\n"))
 	w.Write([]byte(content))

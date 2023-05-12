@@ -2,13 +2,10 @@ package socks5
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/netip"
-	"strconv"
-	"strings"
 	"sync"
 
 	"github.com/rkonfj/toh/spec"
@@ -31,24 +28,19 @@ type Socks5Server struct {
 }
 
 func NewSocks5Server(opts Options) (s *Socks5Server, err error) {
-	ipPort := strings.Split(opts.Listen, ":")
-	if len(ipPort) != 2 {
-		err = errors.New("listen address format error")
+	ipPort, err := net.ResolveTCPAddr("tcp", opts.Listen)
+	if err != nil {
 		return
 	}
 	if opts.AdvertiseIP == "" {
-		if ipPort[0] == "0.0.0.0" || ipPort[0] == "" {
+		if ipPort.IP == nil || ipPort.IP.Equal(net.IPv4zero) {
 			opts.AdvertiseIP = "127.0.0.1"
 		} else {
-			opts.AdvertiseIP = ipPort[0]
+			opts.AdvertiseIP = ipPort.IP.String()
 		}
 	}
 	if opts.AdvertisePort == 0 {
-		port, err := strconv.Atoi(ipPort[1])
-		if err != nil {
-			return nil, err
-		}
-		opts.AdvertisePort = uint16(port)
+		opts.AdvertisePort = uint16(ipPort.Port)
 	}
 	s = &Socks5Server{
 		opts:             opts,
