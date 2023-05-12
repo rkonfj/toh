@@ -3,28 +3,28 @@ package socks5
 import (
 	"context"
 	"fmt"
-	"io"
 	"net"
 	"net/netip"
-	"sync"
 
 	"github.com/rkonfj/toh/spec"
 	"github.com/sirupsen/logrus"
 )
 
 type Options struct {
-	Listen               string
-	AdvertiseIP          string
-	AdvertisePort        uint16
-	TCPDialContext       func(ctx context.Context, addr string) (dialerName string, conn net.Conn, err error)
-	UDPDialContext       func(ctx context.Context, addr string) (dialerName string, conn net.Conn, err error)
-	TrafficEventConsumer func(e *TrafficEvent)
+	Listen         string
+	AdvertiseIP    string
+	AdvertisePort  uint16
+	TCPDialContext func(ctx context.Context, addr string) (
+		dialerName string, conn net.Conn, err error)
+	UDPDialContext func(ctx context.Context, addr string) (
+		dialerName string, conn net.Conn, err error)
+	TrafficEventConsumer func(e *spec.TrafficEvent)
 }
 
 type Socks5Server struct {
-	opts             Options
-	trafficEventChan chan *TrafficEvent
-	httpProxyServer  *HTTPProxyServer
+	opts            Options
+	pipeEngine      *spec.PipeEngine
+	httpProxyServer *HTTPProxyServer
 }
 
 func NewSocks5Server(opts Options) (s *Socks5Server, err error) {
@@ -42,10 +42,12 @@ func NewSocks5Server(opts Options) (s *Socks5Server, err error) {
 	if opts.AdvertisePort == 0 {
 		opts.AdvertisePort = uint16(ipPort.Port)
 	}
+	pipeEngine := spec.NewPipeEngine()
+	pipeEngine.SetTrafficEventConsumer(opts.TrafficEventConsumer)
 	s = &Socks5Server{
-		opts:             opts,
-		trafficEventChan: make(chan *TrafficEvent, 4096),
-		httpProxyServer:  NewHTTPProxyServer(opts),
+		opts:            opts,
+		pipeEngine:      pipeEngine,
+		httpProxyServer: &HTTPProxyServer{opts: opts, pipeEngine: pipeEngine},
 	}
 	return
 }
@@ -64,7 +66,7 @@ func (s *Socks5Server) Run() error {
 
 	logrus.Infof("listen on %s for socks5+http now", s.opts.Listen)
 
-	go s.startTrafficEventConsumeLoop()
+	go s.pipeEngine.RunTrafficEventConsumeLoop()
 	go s.startUDPListenLoop(udpL)
 
 	for {
@@ -73,25 +75,18 @@ func (s *Socks5Server) Run() error {
 			return err
 		}
 		go func() {
-			ctx := context.WithValue(context.Background(), spec.AppAddr, conn.RemoteAddr().String())
-			dialerName, remoteAddr, netConn := s.handshake(ctx, conn)
+			ctx := context.WithValue(context.Background(),
+				spec.AppAddr, conn.RemoteAddr().String())
+			dialerName, netConn := s.handshake(ctx, conn)
 			if netConn != nil {
-				lbc, rbc := s.pipe(conn, netConn)
-				s.trafficEventChan <- &TrafficEvent{
-					DialerName: dialerName,
-					Network:    "tcp",
-					LocalAddr:  conn.RemoteAddr().String(),
-					RemoteAddr: remoteAddr,
-					In:         lbc,
-					Out:        rbc,
-				}
+				s.pipeEngine.Pipe(dialerName, conn, netConn)
 			}
 		}()
 	}
 }
 
 func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (
-	dialerName, remoteAddr string, netConn net.Conn) {
+	dialerName string, netConn net.Conn) {
 	log := logrus.WithField(spec.AppAddr.String(), ctx.Value(spec.AppAddr))
 	buf := make([]byte, 1024)
 	closeConn := true
@@ -177,7 +172,7 @@ func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (
 	}
 	port := spec.BytesToUint16(buf[:2])
 
-	remoteAddr = fmt.Sprintf("%s:%d", addr, port)
+	remoteAddr := fmt.Sprintf("%s:%d", addr, port)
 	switch cmd {
 	// 1. CONNECT
 	case 1:
@@ -211,23 +206,6 @@ func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (
 		log.Debug("do not support BIND now")
 		respNotSupported(conn)
 	}
-	return
-}
-
-func (s *Socks5Server) pipe(conn, rConn net.Conn) (lbc, rbc int64) {
-	if conn == nil || rConn == nil {
-		return
-	}
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		rbc, _ = io.Copy(conn, rConn)
-		conn.Close()
-	}()
-	lbc, _ = io.Copy(rConn, conn)
-	rConn.Close()
-	wg.Wait()
 	return
 }
 

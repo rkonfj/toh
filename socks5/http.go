@@ -16,14 +16,7 @@ import (
 
 type HTTPProxyServer struct {
 	opts       Options
-	httpClient *http.Client
-}
-
-func NewHTTPProxyServer(opts Options) *HTTPProxyServer {
-	return &HTTPProxyServer{
-		opts:       opts,
-		httpClient: &http.Client{},
-	}
+	pipeEngine *spec.PipeEngine
 }
 
 type protocolDetectionConnWrapper struct {
@@ -81,7 +74,7 @@ func (s *HTTPProxyServer) handle(b []byte, originConn net.Conn) {
 		}
 
 		ctx := context.WithValue(context.Background(), spec.AppAddr, conn.RemoteAddr().String())
-		_, httpConn, err := s.opts.TCPDialContext(ctx, addr)
+		dialerName, httpConn, err := s.opts.TCPDialContext(ctx, addr)
 		if err != nil {
 			logrus.Error(err)
 			continue
@@ -89,17 +82,12 @@ func (s *HTTPProxyServer) handle(b []byte, originConn net.Conn) {
 
 		if request.Method == http.MethodConnect {
 			// https_proxy
-			_, httpConn, err := s.opts.TCPDialContext(ctx, addr)
-			if err != nil {
-				logrus.Error(err)
-				continue
-			}
 			_, err = conn.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
 			if err != nil {
 				logrus.Error(err)
 				continue
 			}
-			go pipe(httpConn, conn)
+			go s.pipeEngine.Pipe(dialerName, conn, httpConn)
 			closeConn = false
 			break
 		}
@@ -113,17 +101,10 @@ func (s *HTTPProxyServer) handle(b []byte, originConn net.Conn) {
 			continue
 		}
 
-		go pipe(httpConn, &protocolDetectionConnWrapper{Conn: conn, b: buf.Bytes()})
+		go s.pipeEngine.Pipe(dialerName, &protocolDetectionConnWrapper{Conn: conn, b: buf.Bytes()}, httpConn)
 		closeConn = false
 		break
 	}
-}
-
-func pipe(l, r io.ReadWriteCloser) {
-	defer l.Close()
-	defer r.Close()
-	go io.Copy(l, r)
-	io.Copy(r, l)
 }
 
 func (s *HTTPProxyServer) responsePacScript(w io.Writer) {

@@ -24,10 +24,10 @@ func init() {
 	Cmd.Flags().StringP("config", "c", "", "config file (default is $HOME/.config/toh/socks5.yml)")
 	Cmd.Flags().String("advertise-ip", "", "advertised server ip (default is listen ip)")
 	Cmd.Flags().Uint16("advertise-port", 0, "advertised server port (default is listen port)")
-	Cmd.Flags().String("dns", "", "dns upstream to use (leave blank to disable local dns)")
+	Cmd.Flags().String("dns", "", "local dns upstream (leave blank to disable local dns)")
 	Cmd.Flags().String("dns-listen", "0.0.0.0:2053", "local dns")
 	Cmd.Flags().String("dns-evict", "2h", "local dns cache evict duration")
-	Cmd.Flags().String("dns-fake", "", "fake dns  (leave blank to disable fake dns)")
+	Cmd.Flags().String("dns-fake", "", "local fake dns (leave blank to disable fake dns)")
 
 }
 

@@ -107,22 +107,25 @@ The document has moved
 ### Buildin socks5 proxy server `s5` act as ToH client
 ```sh
 $ ./toh s5 --help
-Socks5 proxy server act as ToH client
+Socks5+http proxy server act as ToH client
 
 Usage:
   toh s5 [flags]
 
 Flags:
-  -c, --config string       socks5 server config file (default is $HOME/.config/toh/socks5.yml)
-      --dns string          dns upstream to use (leave blank to disable local dns)
-      --dns-evict string    local dns cache evict duration (default "2h")
-      --dns-listen string   local dns (default "0.0.0.0:2053")
-  -h, --help                help for s5
+      --advertise-ip string     advertised server ip (default is listen ip)
+      --advertise-port uint16   advertised server port (default is listen port)
+  -c, --config string           config file (default is $HOME/.config/toh/socks5.yml)
+      --dns string              local dns upstream (leave blank to disable local dns)
+      --dns-evict string        local dns cache evict duration (default "2h")
+      --dns-fake string         local fake dns (leave blank to disable fake dns)
+      --dns-listen string       local dns (default "0.0.0.0:2053")
+  -h, --help                    help for s5
 
 Global Flags:
       --log-level string   logrus logger level (default "info")
 $ ./toh s5
-time="2023-04-28T13:46:37+08:00" level=info msg="initializing config file /root/.config/toh/socks5.yml"
+time="2023-05-12T15:02:11Z" level=info msg="initializing config file /root/.config/toh/socks5.yml"
 geoip2: country.mmdb
 listen: 0.0.0.0:2080
 servers:
@@ -132,12 +135,12 @@ servers:
     ruleset:
       - https://raw.githubusercontent.com/rkonfj/toh/main/ruleset.txt
     healthcheck: https://www.google.com/generate_204
-groups: []
-time="2023-04-28T13:46:37+08:00" level=info msg="downloading https://raw.githubusercontent.com/rkonfj/toh/main/ruleset.txt"
-time="2023-04-28T13:46:40+08:00" level=info msg="ruleset   us1: special 0, direct 0, wildcard 20"
-time="2023-04-28T13:46:40+08:00" level=info msg="downloading country.mmdb to /root/.config/toh. this can take up to 2m0s"
-time="2023-04-28T13:46:46+08:00" level=info msg="total 1 proxy servers and 0 groups loaded"
-time="2023-04-28T13:46:46+08:00" level=info msg="listen on 0.0.0.0:2080 for socks5 now"
+time="2023-05-12T15:02:11Z" level=info msg="downloading https://raw.githubusercontent.com/rkonfj/toh/main/ruleset.txt"
+time="2023-05-12T15:02:14Z" level=info msg="ruleset   us1: special 0, direct 0, wildcard 21"
+time="2023-05-12T15:02:14Z" level=info msg="total loaded 1 proxy servers and 0 groups"
+time="2023-05-12T15:02:14Z" level=info msg="downloading country.mmdb to /root/.config/toh (this can take up to 5m0s)"
+time="2023-05-12T15:05:17Z" level=info msg="total 1 proxy servers and 0 groups loaded"
+time="2023-05-12T15:05:17Z" level=info msg="listen on 0.0.0.0:2080 for socks5 now"
 ```
 
 the server `us1` is the test server, will stopped in the future

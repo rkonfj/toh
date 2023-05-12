@@ -4,11 +4,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rkonfj/toh/socks5"
+	"github.com/rkonfj/toh/spec"
 	"github.com/sirupsen/logrus"
 )
 
-func logTrafficEvent(e *socks5.TrafficEvent) {
+func logTrafficEvent(e *spec.TrafficEvent) {
 	if e.In == 0 && e.Out == 0 {
 		return
 	}
