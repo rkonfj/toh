@@ -196,8 +196,18 @@ func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (
 		return
 	// 2. UDP ASSOCIATE
 	case 3:
-		conn.Write([]byte{5, 0, 0, 1})
-		conn.Write(net.ParseIP(s.opts.AdvertiseIP).To4())
+		advertiseIP := net.ParseIP(s.opts.AdvertiseIP)
+		if advertiseIP.IsLoopback() {
+			ipPort, _ := net.ResolveTCPAddr("tcp", conn.LocalAddr().String())
+			advertiseIP = ipPort.IP
+		}
+		if advertiseIP.To4() == nil {
+			conn.Write([]byte{5, 0, 0, 4})
+			conn.Write(advertiseIP.To16())
+		} else {
+			conn.Write([]byte{5, 0, 0, 1})
+			conn.Write(advertiseIP.To4())
+		}
 		conn.Write(spec.Uint16ToBytes(s.opts.AdvertisePort))
 		closeConn = false
 		return

@@ -69,7 +69,7 @@ func (s *HTTPProxyServer) handle(b []byte, originConn net.Conn) {
 		if ip := net.ParseIP(host); ip != nil &&
 			(ip.IsLoopback() || (ip.IsPrivate() && port ==
 				fmt.Sprintf("%d", s.opts.AdvertisePort))) {
-			s.responsePacScript(conn)
+			s.responsePacScript(conn, fmt.Sprintf("%s:%s", host, port))
 			continue
 		}
 
@@ -101,14 +101,18 @@ func (s *HTTPProxyServer) handle(b []byte, originConn net.Conn) {
 			continue
 		}
 
-		go s.pipeEngine.Pipe(dialerName, &protocolDetectionConnWrapper{Conn: conn, b: buf.Bytes()}, httpConn)
+		go s.pipeEngine.Pipe(dialerName,
+			&protocolDetectionConnWrapper{Conn: conn, b: buf.Bytes()}, httpConn)
 		closeConn = false
 		break
 	}
 }
 
-func (s *HTTPProxyServer) responsePacScript(w io.Writer) {
-	pacScriptServer := fmt.Sprintf("%s:%d", s.opts.AdvertiseIP, s.opts.AdvertisePort)
+func (s *HTTPProxyServer) responsePacScript(w io.Writer, referAddr string) {
+	pacScriptServer := referAddr
+	if !net.ParseIP(s.opts.AdvertiseIP).IsLoopback() {
+		pacScriptServer = fmt.Sprintf("%s:%d", s.opts.AdvertiseIP, s.opts.AdvertisePort)
+	}
 	content := fmt.Sprintf("// give me a star please: https://github.com/rkonfj/toh\n\n"+
 		"function FindProxyForURL(url, host) {\n"+
 		"    if (isPlainHostName(host)) return 'DIRECT'\n"+
