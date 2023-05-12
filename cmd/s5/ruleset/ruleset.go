@@ -68,6 +68,14 @@ func Parse(client spec.TohClient, name string, ruleset []string, datapath string
 		}
 		readCloser.Close()
 	}
+	return
+}
+
+func ResetCache() {
+	cache = nil
+}
+
+func (rs *Ruleset) PrintStats() {
 	ipRules := ""
 	if len(rs.directCountrySet) > 0 {
 		ipRules = fmt.Sprintf(", if-ip direct %s", rs.directCountrySet)
@@ -76,11 +84,6 @@ func Parse(client spec.TohClient, name string, ruleset []string, datapath string
 	}
 	logrus.Infof("ruleset %5s: special %d, direct %d, wildcard %d%s",
 		rs.proxy, len(rs.specialSet), len(rs.directSet), len(rs.wildcardSet), ipRules)
-	return
-}
-
-func ResetCache() {
-	cache = nil
 }
 
 func (rs *Ruleset) download(ruleLocation string) (reader io.ReadCloser, err error) {

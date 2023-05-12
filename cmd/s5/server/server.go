@@ -45,8 +45,8 @@ type TohServer struct {
 	Name        string   `yaml:"name"`
 	Api         string   `yaml:"api"`
 	Key         string   `yaml:"key"`
-	Ruleset     []string `yaml:"ruleset"`
-	Healthcheck string   `yaml:"healthcheck"`
+	Ruleset     []string `yaml:"ruleset,omitempty"`
+	Healthcheck string   `yaml:"healthcheck,omitempty"`
 }
 
 type ServerGroup struct {
@@ -104,6 +104,7 @@ func NewSocks5Server(opts Options) (socks5Server *RulebasedSocks5Server, err err
 		return
 	}
 	ruleset.ResetCache()
+	socks5Server.printRulesetStats()
 
 	logrus.Infof("total loaded %d proxy servers and %d groups", len(socks5Server.servers), len(socks5Server.groups))
 
@@ -156,7 +157,7 @@ func (s *RulebasedSocks5Server) loadServers() (err error) {
 			name:   srv.Name,
 			client: c,
 			httpClient: &http.Client{
-				Timeout: 120 * time.Second,
+				Timeout: 300 * time.Second,
 				Transport: &http.Transport{
 					DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 						return c.DialTCP(ctx, addr)
@@ -201,7 +202,21 @@ func (s *RulebasedSocks5Server) loadGroups() (err error) {
 	return
 }
 
-func (s *RulebasedSocks5Server) dial(ctx context.Context, addr, network string) (dialerName string, conn net.Conn, err error) {
+func (s *RulebasedSocks5Server) printRulesetStats() {
+	for _, s := range s.servers {
+		if s.ruleset != nil {
+			s.ruleset.PrintStats()
+		}
+	}
+	for _, g := range s.groups {
+		if g.ruleset != nil {
+			g.ruleset.PrintStats()
+		}
+	}
+}
+
+func (s *RulebasedSocks5Server) dial(ctx context.Context, addr, network string) (
+	dialerName string, conn net.Conn, err error) {
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
 		return
@@ -236,11 +251,13 @@ func (s *RulebasedSocks5Server) dial(ctx context.Context, addr, network string) 
 	return
 }
 
-func (s *RulebasedSocks5Server) dialTCP(ctx context.Context, addr string) (dialerName string, conn net.Conn, err error) {
+func (s *RulebasedSocks5Server) dialTCP(ctx context.Context, addr string) (
+	dialerName string, conn net.Conn, err error) {
 	return s.dial(ctx, addr, "tcp")
 }
 
-func (s *RulebasedSocks5Server) dialUDP(ctx context.Context, addr string) (dialerName string, conn net.Conn, err error) {
+func (s *RulebasedSocks5Server) dialUDP(ctx context.Context, addr string) (
+	dialerName string, conn net.Conn, err error) {
 	if len(s.opts.DNSUpstream) > 0 && strings.Contains(addr, s.opts.DNSFake) {
 		dialerName = "direct"
 		conn, err = s.defaultDialer.Dial("udp", s.opts.DNSListen)
@@ -278,7 +295,7 @@ func getGeoip2Path(hc *http.Client, dataPath, geoip2Path string) string {
 		}
 		return filepath.Join(dataPath, geoip2Path)
 	}
-	logrus.Infof("downloading country.mmdb to %s (this can take up to 2m0s)", dataPath)
+	logrus.Infof("downloading country.mmdb to %s (this can take up to %s)", dataPath, hc.Timeout)
 	mmdbPath := filepath.Join(dataPath, "country.mmdb")
 	resp, err := hc.Get("https://github.com/Dreamacro/maxmind-geoip/releases/latest/download/Country.mmdb")
 	if err != nil {
