@@ -1,7 +1,6 @@
 package socks5
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -28,6 +27,7 @@ type Options struct {
 type Socks5Server struct {
 	opts             Options
 	trafficEventChan chan *TrafficEvent
+	httpProxyServer  *HTTPProxyServer
 }
 
 func NewSocks5Server(opts Options) (s *Socks5Server, err error) {
@@ -53,6 +53,7 @@ func NewSocks5Server(opts Options) (s *Socks5Server, err error) {
 	s = &Socks5Server{
 		opts:             opts,
 		trafficEventChan: make(chan *TrafficEvent, 4096),
+		httpProxyServer:  NewHTTPProxyServer(opts),
 	}
 	return
 }
@@ -101,6 +102,12 @@ func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (
 	dialerName, remoteAddr string, netConn net.Conn) {
 	log := logrus.WithField(spec.AppAddr.String(), ctx.Value(spec.AppAddr))
 	buf := make([]byte, 1024)
+	closeConn := true
+	defer func() {
+		if closeConn {
+			conn.Close()
+		}
+	}()
 
 	// auth
 	n, err := conn.Read(buf[:2])
@@ -110,9 +117,11 @@ func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (
 	}
 
 	if buf[0] != 5 {
-		conn.Read(buf[2:3])
-		if string(buf[:3]) == "GET" {
-			s.serveTemporaryHTTPServer(conn)
+		if buf[0] >= 65 {
+			closeConn = false
+			b := make([]byte, 2)
+			copy(b, buf[:2])
+			go s.httpProxyServer.handle(b, conn)
 			return
 		}
 		log.Debug("unsupport socks version, closed")
@@ -196,13 +205,14 @@ func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (
 		} else {
 			conn.Write([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 		}
-
+		closeConn = false
 		return
 	// 2. UDP ASSOCIATE
 	case 3:
 		conn.Write([]byte{5, 0, 0, 1})
 		conn.Write(net.ParseIP(s.opts.AdvertiseIP).To4())
 		conn.Write(spec.Uint16ToBytes(s.opts.AdvertisePort))
+		closeConn = false
 		return
 	// 3. do not support BIND now
 	default:
@@ -229,35 +239,6 @@ func (s *Socks5Server) pipe(conn, rConn net.Conn) (lbc, rbc int64) {
 	return
 }
 
-func (s *Socks5Server) serveTemporaryHTTPServer(conn net.Conn) {
-	pacScriptServer := fmt.Sprintf("%s:%d", s.opts.AdvertiseIP, s.opts.AdvertisePort)
-	content := fmt.Sprintf("// give me a star please: https://github.com/rkonfj/toh\n\n"+
-		"function FindProxyForURL(url, host) {\n"+
-		"    if (isPlainHostName(host)) return 'DIRECT'\n"+
-		"    if (isInNet(host, '10.0.0.0', '255.0.0.0') ||\n"+
-		"    isInNet(host, '172.16.0.0', '255.240.0.0') ||\n"+
-		"    isInNet(host, '192.168.0.0', '255.255.0.0') ||\n"+
-		"    isInNet(host, '127.0.0.0', '255.255.255.0')) return 'DIRECT'\n"+
-		"    return 'SOCKS5 %s'\n}\n", pacScriptServer)
-	respHTTP(conn, content)
-	for {
-		r := bufio.NewReader(conn)
-		line, err := r.ReadString('\n')
-		if err != nil {
-			return
-		}
-		if strings.HasPrefix(line, "GET ") {
-			respHTTP(conn, content)
-		}
-	}
-}
-
-func respHTTP(conn net.Conn, content string) {
-	conn.Write([]byte("HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Length: "))
-	conn.Write([]byte(strconv.Itoa(len(content))))
-	conn.Write([]byte("\r\n\r\n"))
-	conn.Write([]byte(content))
-}
 func respHostUnreachable(conn net.Conn) {
 	conn.Write([]byte{0x05, 0x04, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 }
