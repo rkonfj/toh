@@ -36,6 +36,7 @@ func NewTohServer(options Options) (*TohServer, error) {
 }
 
 func (s *TohServer) Run() {
+	http.HandleFunc("/stats", s.showStats)
 	http.HandleFunc("/", s.upgradeWebSocket)
 	s.startTrafficEventConsumeDaemon()
 	logrus.Infof("server listen on %s now", s.options.Listen)
@@ -51,9 +52,9 @@ func (s TohServer) upgradeWebSocket(w http.ResponseWriter, r *http.Request) {
 	addr := r.Header.Get("x-toh-addr")
 	clientIP := spec.RealIP(r)
 
-	if !s.acl.Check(apiKey) {
+	if err := s.acl.Check(apiKey); err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
-		logrus.Infof("%s -> %s://%s auth failed", clientIP, network, addr)
+		logrus.Infof("%s -> %s://%s auth failed: %s", clientIP, network, addr, err.Error())
 		return
 	}
 

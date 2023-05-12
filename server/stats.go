@@ -1,10 +1,25 @@
 package server
 
-import "github.com/sirupsen/logrus"
+import (
+	"encoding/json"
+	"net/http"
+
+	"github.com/dustin/go-humanize"
+	"github.com/rkonfj/toh/spec"
+	"github.com/sirupsen/logrus"
+)
 
 type TrafficEvent struct {
 	Key, ClientIP, RemoteAddr, Network string
 	In, Out                            int64
+}
+
+type Stats struct {
+	BytesLimit    string      `json:"bytesLimit,omitempty"`
+	InBytesLimit  string      `json:"inBytesLimit,omitempty"`
+	OutBytesLimit string      `json:"outBytesLimit,omitempty"`
+	BytesUsage    *BytesUsage `json:"bytesUsage,omitempty"`
+	Status        string      `json:"status"`
 }
 
 type TrafficEventConsumer func(e *TrafficEvent)
@@ -23,6 +38,36 @@ func (s *TohServer) startTrafficEventConsumeDaemon() {
 				WithField("stats_in", e.ClientIP).
 				WithField("stats_out", e.RemoteAddr).
 				Info()
+			s.acl.UpdateBytesUsage(e.Key, uint64(e.In), uint64(e.Out))
 		}
 	}()
+}
+
+func (s TohServer) showStats(w http.ResponseWriter, r *http.Request) {
+	apiKey := r.Header.Get("x-toh-key")
+	clientIP := spec.RealIP(r)
+	err := s.acl.Check(apiKey)
+	if err == ErrInvalidKey {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	logrus.Infof("ip %s query %s stats", clientIP, apiKey)
+	key := s.acl.keys[apiKey]
+	stats := Stats{
+		BytesUsage: key.bytesUsage,
+	}
+	if key.bytesLimit > 0 {
+		stats.BytesLimit = humanize.Bytes(key.bytesLimit)
+	}
+	if key.inBytesLimit > 0 {
+		stats.InBytesLimit = humanize.Bytes(key.inBytesLimit)
+	}
+	if key.outBytesLimit > 0 {
+		stats.OutBytesLimit = humanize.Bytes(key.outBytesLimit)
+	}
+	stats.Status = "ok"
+	if err != nil {
+		stats.Status = err.Error()
+	}
+	json.NewEncoder(w).Encode(stats)
 }
