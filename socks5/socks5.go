@@ -97,7 +97,8 @@ func (s *Socks5Server) Run() error {
 	}
 }
 
-func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (dialerName, remoteAddr string, netConn net.Conn) {
+func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (
+	dialerName, remoteAddr string, netConn net.Conn) {
 	log := logrus.WithField(spec.AppAddr.String(), ctx.Value(spec.AppAddr))
 	buf := make([]byte, 1024)
 
@@ -181,7 +182,8 @@ func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (dialerName
 	case 1:
 		dialerName, netConn, err = s.opts.TCPDialContext(ctx, remoteAddr)
 		if err != nil {
-			log.Errorf("socks5 establishing tcp://%s error: %s", remoteAddr, err)
+			log.Errorf("socks5 establishing tcp://%s (via %s) error: %s",
+				remoteAddr, dialerName, err)
 			respHostUnreachable(conn)
 			return
 		}
