@@ -111,7 +111,10 @@ func NewACL(aclPath string) (*ACL, error) {
 	acl.sto = &sto
 	for _, k := range sto.Keys {
 		ke := &key{
-			bytesUsage: k.BytesUsage,
+			bytesUsage: &BytesUsage{},
+		}
+		if k.BytesUsage != nil {
+			ke.bytesUsage = k.BytesUsage
 		}
 		acl.keys[k.Key] = ke
 		if k.BytesLimit != "" {
