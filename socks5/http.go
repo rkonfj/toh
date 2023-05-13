@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/rkonfj/toh/spec"
 	"github.com/sirupsen/logrus"
@@ -18,6 +19,8 @@ type HTTPProxyServer struct {
 	opts       Options
 	pipeEngine *spec.PipeEngine
 }
+
+type Handler func(w http.ResponseWriter, r *http.Request)
 
 type protocolDetectionConnWrapper struct {
 	net.Conn
@@ -69,6 +72,15 @@ func (s *HTTPProxyServer) handle(b []byte, originConn net.Conn) {
 		if ip := net.ParseIP(host); ip != nil &&
 			(ip.IsLoopback() || (ip.IsPrivate() && port ==
 				fmt.Sprintf("%d", s.opts.AdvertisePort))) {
+			if h, ok := s.opts.HTTPHandlers[request.URL.Path]; ok {
+				w := newResponseWriter(conn)
+				h(w, request)
+				err := w.write()
+				if err != nil {
+					logrus.Error(err)
+				}
+				continue
+			}
 			s.responsePacScript(conn, fmt.Sprintf("%s:%s", host, port))
 			continue
 		}
@@ -125,4 +137,50 @@ func (s *HTTPProxyServer) responsePacScript(w io.Writer, referAddr string) {
 	w.Write([]byte(strconv.Itoa(len(content))))
 	w.Write([]byte("\r\n\r\n"))
 	w.Write([]byte(content))
+}
+
+type HTTPResponseWriter struct {
+	net.Conn
+	headers    http.Header
+	statusCode int
+	body       bytes.Buffer
+}
+
+func newResponseWriter(conn net.Conn) *HTTPResponseWriter {
+	h := http.Header{}
+	h.Set("Connection", "keep-alive")
+	h.Set("Date", time.Now().UTC().Format(http.TimeFormat))
+	h.Set("Server", "ToH")
+
+	return &HTTPResponseWriter{
+		Conn:       conn,
+		headers:    h,
+		statusCode: http.StatusOK,
+		body:       bytes.Buffer{},
+	}
+}
+
+func (w *HTTPResponseWriter) Header() http.Header {
+	return w.headers
+}
+
+func (w *HTTPResponseWriter) Write(data []byte) (int, error) {
+	return w.body.Write(data)
+}
+
+func (w *HTTPResponseWriter) WriteHeader(statusCode int) {
+	w.statusCode = statusCode
+}
+
+func (w *HTTPResponseWriter) write() (err error) {
+	b := w.body.Bytes()
+	w.headers.Set("Content-Length", fmt.Sprintf("%d", len(b)))
+
+	statusLine := fmt.Sprintf("HTTP/1.1 %d %s", w.statusCode, http.StatusText(w.statusCode))
+	w.Conn.Write([]byte(statusLine + "\r\n"))
+	w.headers.Write(w.Conn)
+	w.Conn.Write([]byte("\r\n"))
+
+	_, err = w.Conn.Write(b)
+	return
 }

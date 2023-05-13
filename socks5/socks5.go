@@ -19,6 +19,7 @@ type Options struct {
 	UDPDialContext func(ctx context.Context, addr string) (
 		dialerName string, conn net.Conn, err error)
 	TrafficEventConsumer func(e *spec.TrafficEvent)
+	HTTPHandlers         map[string]Handler
 }
 
 type Socks5Server struct {

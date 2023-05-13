@@ -59,6 +59,7 @@ type ServerGroup struct {
 
 type RulebasedSocks5Server struct {
 	opts           Options
+	socks5Opts     socks5.Options
 	servers        []*Server
 	groups         []*Group
 	defaultDialer  net.Dialer
@@ -81,6 +82,9 @@ func (s *Server) limited() bool {
 	if s.limit == nil {
 		return false
 	}
+	if s.limit.Status == "" {
+		return false
+	}
 	return s.limit.Status != "ok"
 }
 
@@ -101,7 +105,18 @@ func NewSocks5Server(opts Options) (socks5Server *RulebasedSocks5Server, err err
 			cache:     make(map[string]*cacheEntry),
 			hostCache: make(map[string]*hostCacheEntry),
 		},
-		dnsCacheTicker: time.NewTicker(time.Duration(math.Max(float64(opts.DNSEvict/20), float64(time.Minute)))),
+		dnsCacheTicker: time.NewTicker(
+			time.Duration(math.Max(float64(opts.DNSEvict/20), float64(time.Minute)))),
+	}
+
+	socks5Server.socks5Opts = socks5.Options{
+		Listen:               opts.Cfg.Listen,
+		AdvertiseIP:          opts.AdvertiseIP,
+		AdvertisePort:        opts.AdvertisePort,
+		TCPDialContext:       socks5Server.dialTCP,
+		UDPDialContext:       socks5Server.dialUDP,
+		TrafficEventConsumer: logTrafficEvent,
+		HTTPHandlers:         make(map[string]socks5.Handler),
 	}
 
 	err = socks5Server.loadServers()
@@ -116,9 +131,13 @@ func NewSocks5Server(opts Options) (socks5Server *RulebasedSocks5Server, err err
 	ruleset.ResetCache()
 	socks5Server.printRulesetStats()
 
-	logrus.Infof("total loaded %d proxy servers and %d groups", len(socks5Server.servers), len(socks5Server.groups))
+	logrus.Infof("total loaded %d proxy servers and %d groups",
+		len(socks5Server.servers), len(socks5Server.groups))
 
-	socks5Server.geoip2db, err = openGeoip2(selectServer(socks5Server.servers).httpClient, opts.DataRoot, opts.Cfg.Geoip2)
+	socks5Server.registerHTTPHandlers()
+
+	socks5Server.geoip2db, err = openGeoip2(selectServer(socks5Server.servers).httpClient,
+		opts.DataRoot, opts.Cfg.Geoip2)
 	if err != nil {
 		return
 	}
@@ -126,16 +145,7 @@ func NewSocks5Server(opts Options) (socks5Server *RulebasedSocks5Server, err err
 }
 
 func (s *RulebasedSocks5Server) Run() error {
-	opts := socks5.Options{
-		Listen:               s.opts.Cfg.Listen,
-		AdvertiseIP:          s.opts.AdvertiseIP,
-		AdvertisePort:        s.opts.AdvertisePort,
-		TCPDialContext:       s.dialTCP,
-		UDPDialContext:       s.dialUDP,
-		TrafficEventConsumer: logTrafficEvent,
-	}
-
-	ss, err := socks5.NewSocks5Server(opts)
+	ss, err := socks5.NewSocks5Server(s.socks5Opts)
 	if err != nil {
 		return err
 	}
@@ -216,6 +226,11 @@ func (s *RulebasedSocks5Server) printRulesetStats() {
 			g.ruleset.PrintStats()
 		}
 	}
+}
+
+func (s *RulebasedSocks5Server) registerHTTPHandlers() {
+	s.socks5Opts.HTTPHandlers["/servers"] = s.listServers
+	s.socks5Opts.HTTPHandlers["/groups"] = s.listGroups
 }
 
 func (s *RulebasedSocks5Server) dial(ctx context.Context, addr, network string) (
