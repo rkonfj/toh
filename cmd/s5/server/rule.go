@@ -30,7 +30,7 @@ func newSelected(server *Server, group string, err error) *selected {
 	}
 }
 
-func (s *RulebasedSocks5Server) selectProxyServer(host string) (proxy *selected) {
+func (s *S5Server) selectProxyServer(host string) (proxy *selected) {
 	ip := net.ParseIP(host)
 	if ip != nil {
 		// reverse resolution
@@ -46,6 +46,10 @@ func (s *RulebasedSocks5Server) selectProxyServer(host string) (proxy *selected)
 		}
 
 		// reverse resolution falied and use geoip
+		if s.geoip2db == nil {
+			goto domainMatch
+		}
+
 		c, err := s.geoip2db.Country(ip)
 		if err != nil {
 			proxy.err = err
@@ -78,7 +82,7 @@ domainMatch:
 	return
 }
 
-func (s *RulebasedSocks5Server) domainMatch(host string) (server *Server, group string, err error) {
+func (s *S5Server) domainMatch(host string) (server *Server, group string, err error) {
 	// if group match, return
 	if len(s.groups) > 0 {
 		directGroups := make(map[string]struct{})

@@ -57,7 +57,7 @@ type ServerGroup struct {
 	Ruleset []string `yaml:"ruleset"`
 }
 
-type RulebasedSocks5Server struct {
+type S5Server struct {
 	opts           Options
 	socks5Opts     socks5.Options
 	servers        []*Server
@@ -94,8 +94,8 @@ type Group struct {
 	ruleset *ruleset.Ruleset
 }
 
-func NewSocks5Server(opts Options) (socks5Server *RulebasedSocks5Server, err error) {
-	socks5Server = &RulebasedSocks5Server{
+func NewS5Server(opts Options) (s5Server *S5Server, err error) {
+	s5Server = &S5Server{
 		opts:          opts,
 		servers:       []*Server{},
 		groups:        []*Group{},
@@ -109,52 +109,47 @@ func NewSocks5Server(opts Options) (socks5Server *RulebasedSocks5Server, err err
 			time.Duration(math.Max(float64(opts.DNSEvict/20), float64(time.Minute)))),
 	}
 
-	socks5Server.socks5Opts = socks5.Options{
+	s5Server.socks5Opts = socks5.Options{
 		Listen:               opts.Cfg.Listen,
 		AdvertiseIP:          opts.AdvertiseIP,
 		AdvertisePort:        opts.AdvertisePort,
-		TCPDialContext:       socks5Server.dialTCP,
-		UDPDialContext:       socks5Server.dialUDP,
+		TCPDialContext:       s5Server.dialTCP,
+		UDPDialContext:       s5Server.dialUDP,
 		TrafficEventConsumer: logTrafficEvent,
 		HTTPHandlers:         make(map[string]socks5.Handler),
 	}
 
-	err = socks5Server.loadServers()
+	err = s5Server.loadServers()
 	if err != nil {
 		return
 	}
 
-	err = socks5Server.loadGroups()
+	err = s5Server.loadGroups()
 	if err != nil {
 		return
 	}
 	ruleset.ResetCache()
-	socks5Server.printRulesetStats()
+	s5Server.printRulesetStats()
 
 	logrus.Infof("total loaded %d proxy servers and %d groups",
-		len(socks5Server.servers), len(socks5Server.groups))
+		len(s5Server.servers), len(s5Server.groups))
 
-	socks5Server.registerHTTPHandlers()
-
-	socks5Server.geoip2db, err = openGeoip2(selectServer(socks5Server.servers).httpClient,
-		opts.DataRoot, opts.Cfg.Geoip2)
-	if err != nil {
-		return
-	}
+	s5Server.registerHTTPHandlers()
 	return
 }
 
-func (s *RulebasedSocks5Server) Run() error {
+func (s *S5Server) Run() error {
 	ss, err := socks5.NewSocks5Server(s.socks5Opts)
 	if err != nil {
 		return err
 	}
 
+	go s.openGeoip2()
 	go s.runDNSIfNeeded()
 	return ss.Run()
 }
 
-func (s *RulebasedSocks5Server) loadServers() (err error) {
+func (s *S5Server) loadServers() (err error) {
 	for _, srv := range s.opts.Cfg.Servers {
 		var c *client.TohClient
 		c, err = client.NewTohClient(client.Options{
@@ -190,7 +185,7 @@ func (s *RulebasedSocks5Server) loadServers() (err error) {
 	return
 }
 
-func (s *RulebasedSocks5Server) loadGroups() (err error) {
+func (s *S5Server) loadGroups() (err error) {
 	for _, g := range s.opts.Cfg.Groups {
 		group := &Group{
 			name:    g.Name,
@@ -215,7 +210,7 @@ func (s *RulebasedSocks5Server) loadGroups() (err error) {
 	return
 }
 
-func (s *RulebasedSocks5Server) printRulesetStats() {
+func (s *S5Server) printRulesetStats() {
 	for _, s := range s.servers {
 		if s.ruleset != nil {
 			s.ruleset.PrintStats()
@@ -228,12 +223,12 @@ func (s *RulebasedSocks5Server) printRulesetStats() {
 	}
 }
 
-func (s *RulebasedSocks5Server) registerHTTPHandlers() {
+func (s *S5Server) registerHTTPHandlers() {
 	s.socks5Opts.HTTPHandlers["/servers"] = s.listServers
 	s.socks5Opts.HTTPHandlers["/groups"] = s.listGroups
 }
 
-func (s *RulebasedSocks5Server) dial(ctx context.Context, addr, network string) (
+func (s *S5Server) dial(ctx context.Context, addr, network string) (
 	dialerName string, conn net.Conn, err error) {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
@@ -269,12 +264,12 @@ func (s *RulebasedSocks5Server) dial(ctx context.Context, addr, network string) 
 	return
 }
 
-func (s *RulebasedSocks5Server) dialTCP(ctx context.Context, addr string) (
+func (s *S5Server) dialTCP(ctx context.Context, addr string) (
 	dialerName string, conn net.Conn, err error) {
 	return s.dial(ctx, addr, "tcp")
 }
 
-func (s *RulebasedSocks5Server) dialUDP(ctx context.Context, addr string) (
+func (s *S5Server) dialUDP(ctx context.Context, addr string) (
 	dialerName string, conn net.Conn, err error) {
 	if len(s.opts.DNSUpstream) > 0 && strings.Contains(addr, s.opts.DNSFake) {
 		dialerName = "direct"
@@ -282,6 +277,23 @@ func (s *RulebasedSocks5Server) dialUDP(ctx context.Context, addr string) (
 		return
 	}
 	return s.dial(ctx, addr, "udp")
+}
+
+func (s *S5Server) openGeoip2() {
+	geoip2Path := getGeoip2Path(
+		selectServer(s.servers).httpClient, s.opts.DataRoot, s.opts.Cfg.Geoip2)
+	db, err := geoip2.Open(geoip2Path)
+	if err != nil {
+		if strings.Contains(err.Error(), "invalid MaxMind") {
+			os.Remove(geoip2Path)
+		} else if !errors.Is(err, os.ErrNotExist) {
+			logrus.Errorf("geoip2 open faild: %s", err.Error())
+			return
+		}
+		s.openGeoip2()
+		return
+	}
+	s.geoip2db = db
 }
 
 func selectServer(servers []*Server) *Server {
@@ -299,19 +311,6 @@ func selectServer(servers []*Server) *Server {
 		return servers[0]
 	}
 	return s[0]
-}
-
-func openGeoip2(httpClient *http.Client, dataPath, geoip2Path string) (*geoip2.Reader, error) {
-	db, err := geoip2.Open(getGeoip2Path(httpClient, dataPath, geoip2Path))
-	if err != nil {
-		if strings.Contains(err.Error(), "invalid MaxMind") {
-			os.Remove(geoip2Path)
-		} else if !errors.Is(err, os.ErrNotExist) {
-			return nil, err
-		}
-		return openGeoip2(httpClient, dataPath, getGeoip2Path(httpClient, dataPath, ""))
-	}
-	return db, nil
 }
 
 func getGeoip2Path(hc *http.Client, dataPath, geoip2Path string) string {
@@ -339,6 +338,6 @@ func getGeoip2Path(hc *http.Client, dataPath, geoip2Path string) string {
 	if err != nil {
 		logrus.Error(err)
 	}
-
+	logrus.Info("download country.mmdb successfully")
 	return mmdbPath
 }

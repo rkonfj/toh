@@ -63,7 +63,7 @@ func (c *dnsCache) Set(key string, entry *cacheEntry) {
 	}
 }
 
-func (c *RulebasedSocks5Server) dnsCacheEvictLoop() {
+func (c *S5Server) dnsCacheEvictLoop() {
 	for range c.dnsCacheTicker.C {
 		expiredKeys := []string{}
 		c.dnsCache.lock.Lock()
@@ -88,7 +88,7 @@ func (c *RulebasedSocks5Server) dnsCacheEvictLoop() {
 	}
 }
 
-func (s *RulebasedSocks5Server) runDNSIfNeeded() {
+func (s *S5Server) runDNSIfNeeded() {
 	if len(s.opts.DNSUpstream) == 0 {
 		return
 	}
@@ -120,7 +120,7 @@ func (s *RulebasedSocks5Server) runDNSIfNeeded() {
 	wg.Wait()
 }
 
-func (s *RulebasedSocks5Server) dnsQuery(w dns.ResponseWriter, r *dns.Msg) {
+func (s *S5Server) dnsQuery(w dns.ResponseWriter, r *dns.Msg) {
 	if len(r.Question) == 0 {
 		return
 	}
@@ -143,7 +143,7 @@ func (s *RulebasedSocks5Server) dnsQuery(w dns.ResponseWriter, r *dns.Msg) {
 	}
 }
 
-func (s *RulebasedSocks5Server) updateCache(r *dns.Msg, clientAddr string) *cacheEntry {
+func (s *S5Server) updateCache(r *dns.Msg, clientAddr string) *cacheEntry {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	proxy := s.selectProxyServer(strings.Trim(r.Question[0].Name, "."))

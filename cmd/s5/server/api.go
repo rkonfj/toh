@@ -20,7 +20,7 @@ type GroupInfo struct {
 	Servers []ServerInfo `json:"servers"`
 }
 
-func (s *RulebasedSocks5Server) listServers(w http.ResponseWriter, r *http.Request) {
+func (s *S5Server) listServers(w http.ResponseWriter, r *http.Request) {
 	servers := make([]ServerInfo, 0)
 	for _, ser := range s.servers {
 		servers = append(servers, ServerInfo{
@@ -32,7 +32,7 @@ func (s *RulebasedSocks5Server) listServers(w http.ResponseWriter, r *http.Reque
 	json.NewEncoder(w).Encode(servers)
 }
 
-func (s *RulebasedSocks5Server) listGroups(w http.ResponseWriter, r *http.Request) {
+func (s *S5Server) listGroups(w http.ResponseWriter, r *http.Request) {
 	groups := make([]GroupInfo, 0)
 
 	for _, g := range s.groups {

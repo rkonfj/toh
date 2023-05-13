@@ -36,7 +36,7 @@ func startAction(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	sm, err := server.NewSocks5Server(opts)
+	sm, err := server.NewS5Server(opts)
 	if err != nil {
 		return err
 	}
