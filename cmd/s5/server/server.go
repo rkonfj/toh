@@ -18,6 +18,7 @@ import (
 	"github.com/oschwald/geoip2-golang"
 	"github.com/rkonfj/toh/client"
 	"github.com/rkonfj/toh/cmd/s5/ruleset"
+	"github.com/rkonfj/toh/server/api"
 	"github.com/rkonfj/toh/socks5"
 	"github.com/rkonfj/toh/spec"
 	"github.com/sirupsen/logrus"
@@ -73,6 +74,14 @@ type Server struct {
 	httpClient *http.Client
 	ruleset    *ruleset.Ruleset
 	latency    time.Duration
+	limit      *api.Stats
+}
+
+func (s *Server) limited() bool {
+	if s.limit == nil {
+		return false
+	}
+	return s.limit.Status != "ok"
 }
 
 type Group struct {
@@ -165,6 +174,7 @@ func (s *RulebasedSocks5Server) loadServers() (err error) {
 			}
 		}
 		go healthcheck(server, srv.Healthcheck)
+		go updateStats(server)
 		s.servers = append(s.servers, server)
 	}
 	return
@@ -260,11 +270,19 @@ func (s *RulebasedSocks5Server) dialUDP(ctx context.Context, addr string) (
 }
 
 func selectServer(servers []*Server) *Server {
-	s := make([]*Server, len(servers))
-	copy(s, servers)
+	var s []*Server
+	for _, server := range servers {
+		if server.limited() {
+			continue
+		}
+		s = append(s, server)
+	}
 	sort.Slice(s, func(i, j int) bool {
 		return s[i].latency < s[j].latency
 	})
+	if len(s) == 0 {
+		return servers[0]
+	}
 	return s[0]
 }
 

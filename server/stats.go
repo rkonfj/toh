@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/dustin/go-humanize"
+	"github.com/rkonfj/toh/server/api"
 	"github.com/rkonfj/toh/spec"
 	"github.com/sirupsen/logrus"
 )
@@ -12,14 +13,6 @@ import (
 type TrafficEvent struct {
 	Key, ClientIP, RemoteAddr, Network string
 	In, Out                            int64
-}
-
-type Stats struct {
-	BytesLimit    string      `json:"bytesLimit,omitempty"`
-	InBytesLimit  string      `json:"inBytesLimit,omitempty"`
-	OutBytesLimit string      `json:"outBytesLimit,omitempty"`
-	BytesUsage    *BytesUsage `json:"bytesUsage,omitempty"`
-	Status        string      `json:"status"`
 }
 
 type TrafficEventConsumer func(e *TrafficEvent)
@@ -53,7 +46,7 @@ func (s TohServer) showStats(w http.ResponseWriter, r *http.Request) {
 	}
 	logrus.Infof("ip %s query %s stats", clientIP, apiKey)
 	key := s.acl.keys[apiKey]
-	stats := Stats{
+	stats := api.Stats{
 		BytesUsage: key.bytesUsage,
 	}
 	if key.bytesLimit > 0 {

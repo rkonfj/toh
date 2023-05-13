@@ -37,3 +37,10 @@ func healthcheck(server *Server, url string) {
 		time.Sleep(15 * time.Second)
 	}
 }
+
+func updateStats(server *Server) {
+	for {
+		server.limit, _ = server.client.Stats()
+		time.Sleep(15 * time.Second)
+	}
+}

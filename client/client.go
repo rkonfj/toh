@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
+	"github.com/rkonfj/toh/server/api"
 	"github.com/rkonfj/toh/spec"
 	"github.com/sirupsen/logrus"
 	"nhooyr.io/websocket"
@@ -77,6 +79,28 @@ func (c *TohClient) DialUDP(ctx context.Context, addr string) (net.Conn, error) 
 		return nil, err
 	}
 	return spec.NewWSStreamConn(&NhooyrWSConn{conn}, &net.UDPAddr{IP: ip, Port: port}), nil
+}
+
+func (c *TohClient) Stats() (s *api.Stats, err error) {
+	u, _ := url.ParseRequestURI(c.options.ServerAddr)
+	scheme := u.Scheme
+	if u.Scheme == "ws" {
+		scheme = "http"
+	} else if u.Scheme == "wss" {
+		scheme = "https"
+	}
+	apiUrl := fmt.Sprintf("%s://%s/stats", scheme, u.Host)
+	req, err := http.NewRequest(http.MethodGet, apiUrl, nil)
+	req.Header.Add("x-toh-key", c.options.ApiKey)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return
+	}
+	s = &api.Stats{}
+	defer resp.Body.Close()
+
+	err = json.NewDecoder(resp.Body).Decode(s)
+	return
 }
 
 func (c *TohClient) dnsExchange(dnServer string, query *dns.Msg, direct bool) (resp *dns.Msg, err error) {

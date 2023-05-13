@@ -9,6 +9,7 @@ import (
 
 	"github.com/dustin/go-humanize"
 	"github.com/google/uuid"
+	"github.com/rkonfj/toh/server/api"
 	"github.com/rkonfj/toh/spec"
 	"github.com/sirupsen/logrus"
 )
@@ -32,22 +33,17 @@ type ACLStorage struct {
 }
 
 type Key struct {
-	Name          string      `json:"name"`
-	Key           string      `json:"key"`
-	BytesLimit    string      `json:"bytesLimit,omitempty"`
-	InBytesLimit  string      `json:"inBytesLimit,omitempty"`
-	OutBytesLimit string      `json:"outBytesLimit,omitempty"`
-	BytesUsage    *BytesUsage `json:"bytesUsage,omitempty"`
-}
-
-type BytesUsage struct {
-	In  uint64 `json:"in"`
-	Out uint64 `json:"out"`
+	Name          string          `json:"name"`
+	Key           string          `json:"key"`
+	BytesLimit    string          `json:"bytesLimit,omitempty"`
+	InBytesLimit  string          `json:"inBytesLimit,omitempty"`
+	OutBytesLimit string          `json:"outBytesLimit,omitempty"`
+	BytesUsage    *api.BytesUsage `json:"bytesUsage,omitempty"`
 }
 
 type key struct {
 	bytesLimit, inBytesLimit, outBytesLimit uint64
-	bytesUsage                              *BytesUsage
+	bytesUsage                              *api.BytesUsage
 }
 
 func (k *key) inBytesLimited() bool {
@@ -111,7 +107,7 @@ func NewACL(aclPath string) (*ACL, error) {
 	acl.sto = &sto
 	for _, k := range sto.Keys {
 		ke := &key{
-			bytesUsage: &BytesUsage{},
+			bytesUsage: &api.BytesUsage{},
 		}
 		if k.BytesUsage != nil {
 			ke.bytesUsage = k.BytesUsage
