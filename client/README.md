@@ -36,6 +36,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	defer resp.Body.Close()
 
 	io.Copy(os.Stdout, resp.Body)
 }
