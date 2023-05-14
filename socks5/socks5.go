@@ -44,7 +44,7 @@ func NewSocks5Server(opts Options) (s *Socks5Server, err error) {
 		opts.AdvertisePort = uint16(ipPort.Port)
 	}
 	pipeEngine := spec.NewPipeEngine()
-	pipeEngine.SetTrafficEventConsumer(opts.TrafficEventConsumer)
+	pipeEngine.AddEventConsumer(opts.TrafficEventConsumer)
 	s = &Socks5Server{
 		opts:            opts,
 		pipeEngine:      pipeEngine,

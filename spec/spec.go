@@ -45,14 +45,13 @@ func NewWSStreamConn(wsConn WSConn, addr net.Addr) *WSStreamConn {
 // Read can be made to time out and return an error after a fixed
 // time limit; see SetDeadline and SetReadDeadline.
 func (c *WSStreamConn) Read(b []byte) (n int, err error) {
-	if len(c.buf) > 0 {
-		if len(c.buf) <= len(b) {
-			n := copy(b, c.buf)
+	if c.buf != nil {
+		n = copy(b, c.buf)
+		if n < len(c.buf) {
+			c.buf = c.buf[n:]
+		} else {
 			c.buf = nil
-			return n, nil
 		}
-		copy(b, c.buf[:len(b)])
-		c.buf = c.buf[len(b):]
 		return len(b), nil
 	}
 
@@ -72,14 +71,11 @@ func (c *WSStreamConn) Read(b []byte) (n int, err error) {
 		return 0, err
 	}
 
-	if len(wsb) > len(b) {
-		copy(b, wsb[:len(b)])
-		c.buf = make([]byte, len(wsb[len(b):]))
-		copy(c.buf, wsb[len(b):])
-		return len(b), nil
+	n = copy(b, wsb)
+	if n < len(wsb) {
+		c.buf = wsb[n:]
 	}
-	copy(b, wsb)
-	return len(wsb), nil
+	return
 }
 
 // Write writes data to the connection.

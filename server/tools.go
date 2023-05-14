@@ -16,15 +16,14 @@ func RWWS(ws *websocket.Conn) *WSReadWrite {
 }
 
 func (ws *WSReadWrite) Read(b []byte) (n int, err error) {
-	if len(ws.buf) > 0 {
-		if len(ws.buf) <= len(b) {
-			copy(b, ws.buf)
+	if ws.buf != nil {
+		n = copy(b, ws.buf)
+		if n < len(ws.buf) {
+			ws.buf = ws.buf[n:]
+		} else {
 			ws.buf = nil
-			return len(ws.buf), nil
 		}
-		copy(b, ws.buf[:len(b)])
-		ws.buf = ws.buf[len(b):]
-		return len(b), nil
+		return
 	}
 
 	_, wsb, err := ws.ws.Read(context.Background())
@@ -32,14 +31,11 @@ func (ws *WSReadWrite) Read(b []byte) (n int, err error) {
 		return len(wsb), err
 	}
 
-	if len(wsb) > len(b) {
-		copy(b, wsb[:len(b)])
-		ws.buf = make([]byte, len(wsb[len(b):]))
-		copy(ws.buf, wsb[len(b):])
-		return len(b), nil
+	n = copy(b, wsb)
+	if n < len(wsb) {
+		ws.buf = wsb[n:]
 	}
-	copy(b, wsb)
-	return len(wsb), nil
+	return
 }
 
 func (ws *WSReadWrite) Write(p []byte) (n int, err error) {

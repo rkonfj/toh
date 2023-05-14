@@ -14,7 +14,7 @@ type TrafficEvent struct {
 type TrafficEventConsumer func(e *TrafficEvent)
 
 type PipeEngine struct {
-	consumer  TrafficEventConsumer
+	consumers []TrafficEventConsumer
 	eventChan chan *TrafficEvent
 }
 
@@ -24,8 +24,8 @@ func NewPipeEngine() *PipeEngine {
 	}
 }
 
-func (s *PipeEngine) SetTrafficEventConsumer(c TrafficEventConsumer) {
-	s.consumer = c
+func (s *PipeEngine) AddEventConsumer(c TrafficEventConsumer) {
+	s.consumers = append(s.consumers, c)
 }
 
 func (s *PipeEngine) PubEvent(e *TrafficEvent) {
@@ -34,9 +34,8 @@ func (s *PipeEngine) PubEvent(e *TrafficEvent) {
 
 func (s *PipeEngine) RunTrafficEventConsumeLoop() {
 	for e := range s.eventChan {
-		if s.consumer != nil {
-			s.consumer(e)
-			continue
+		for _, c := range s.consumers {
+			c(e)
 		}
 	}
 }
