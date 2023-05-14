@@ -282,8 +282,11 @@ func (s *S5Server) dialUDP(ctx context.Context, addr string) (
 }
 
 func (s *S5Server) openGeoip2() {
-	geoip2Path := getGeoip2Path(
-		selectServer(s.servers).httpClient, s.opts.DataRoot, s.opts.Cfg.Geoip2)
+	geoip2Path := s.opts.Cfg.Geoip2
+	if !filepath.IsAbs(geoip2Path) {
+		geoip2Path = filepath.Join(s.opts.DataRoot, geoip2Path)
+	}
+
 	db, err := geoip2.Open(geoip2Path)
 	if err != nil {
 		if strings.Contains(err.Error(), "invalid MaxMind") {
@@ -292,6 +295,7 @@ func (s *S5Server) openGeoip2() {
 			logrus.Errorf("geoip2 open faild: %s", err.Error())
 			return
 		}
+		downloadGeoip2DB(selectServer(s.servers).httpClient, geoip2Path)
 		s.openGeoip2()
 		return
 	}
@@ -315,31 +319,25 @@ func selectServer(servers []*Server) *Server {
 	return s[0]
 }
 
-func getGeoip2Path(hc *http.Client, dataPath, geoip2Path string) string {
-	if geoip2Path != "" {
-		if filepath.IsAbs(geoip2Path) {
-			return geoip2Path
-		}
-		return filepath.Join(dataPath, geoip2Path)
-	}
-	logrus.Infof("downloading country.mmdb to %s (this can take up to %s)", dataPath, hc.Timeout)
-	mmdbPath := filepath.Join(dataPath, "country.mmdb")
-	resp, err := hc.Get("https://github.com/Dreamacro/maxmind-geoip/releases/latest/download/Country.mmdb")
+func downloadGeoip2DB(hc *http.Client, geoip2Path string) {
+	logrus.Infof("downloading %s (this can take up to %s)", geoip2Path, hc.Timeout)
+	mmdbURL := "https://github.com/Dreamacro/maxmind-geoip/releases/latest/download/Country.mmdb"
+	resp, err := hc.Get(mmdbURL)
 	if err != nil {
-		logrus.Error("download country.mmdb error: ", err.Error())
-		return mmdbPath
+		logrus.Error(err)
+		return
 	}
 	defer resp.Body.Close()
-	mmdb, err := os.OpenFile(mmdbPath, os.O_CREATE|os.O_WRONLY, 0644)
+	mmdb, err := os.OpenFile(geoip2Path, os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		logrus.Errorf("open db %s error: %s", mmdbPath, err)
-		return mmdbPath
+		logrus.Errorf("open db %s error: %s", geoip2Path, err)
+		return
 	}
 	defer mmdb.Close()
 	_, err = io.Copy(mmdb, resp.Body)
 	if err != nil {
-		logrus.Error(err)
+		logrus.Error("download country.mmdb error: ", err)
+		return
 	}
 	logrus.Info("download country.mmdb successfully")
-	return mmdbPath
 }

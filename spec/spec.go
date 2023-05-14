@@ -52,7 +52,7 @@ func (c *WSStreamConn) Read(b []byte) (n int, err error) {
 		} else {
 			c.buf = nil
 		}
-		return len(b), nil
+		return
 	}
 
 	ctx := context.Background()
