@@ -81,9 +81,10 @@ Usage:
 
 Flags:
   -k, --api-key string    the ToH api-key for authcate
-  -f, --forward strings   tunnel mapping (<net>/<local>/<remote>, i.e. udp/0.0.0.0:53/8.8.8.8:53)
+  -f, --forward strings   tunnel mapping (i.e. udp/0.0.0.0:53/8.8.8.8:53)
   -h, --help              help for pf
   -s, --server string     the ToH server address
+      --udp-buf int       the maximum UDP packet size (default 1472)
 
 $ ./toh pf -s wss://us-l4-vultr.synf.in/ws -k 5868a941-3025-4c6d-ad3a-41e29bb42e5f -f udp/127.0.0.53:53/8.8.8.8:53 -f tcp/0.0.0.0:1080/google.com:80
 time="2023-04-28T13:52:31+08:00" level=info msg="listen on 127.0.0.53:53 for udp://8.8.8.8:53 now"

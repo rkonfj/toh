@@ -15,7 +15,8 @@ func init() {
 	}
 	Cmd.Flags().StringP("server", "s", "", "the ToH server address")
 	Cmd.Flags().StringP("api-key", "k", "", "the ToH api-key for authcate")
-	Cmd.Flags().StringSliceP("forward", "f", []string{}, "tunnel mapping (<net>/<local>/<remote>, i.e. udp/0.0.0.0:53/8.8.8.8:53)")
+	Cmd.Flags().Int64("udp-buf", 1472, "the maximum UDP packet size")
+	Cmd.Flags().StringSliceP("forward", "f", []string{}, "tunnel mapping (i.e. udp/0.0.0.0:53/8.8.8.8:53)")
 
 	Cmd.MarkFlagRequired("server")
 	Cmd.MarkFlagRequired("api-key")
@@ -46,5 +47,9 @@ func processOptions(cmd *cobra.Command) (options Options, err error) {
 		return
 	}
 	options.ApiKey, err = cmd.Flags().GetString("api-key")
+	if err != nil {
+		return
+	}
+	options.UDPBuf, err = cmd.Flags().GetInt64("udp-buf")
 	return
 }
