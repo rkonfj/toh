@@ -131,7 +131,7 @@ func (c *TohClient) lookupIP(host string, t uint16, direct bool) (ips []net.IP, 
 	query := &dns.Msg{}
 	query.SetQuestion(dns.Fqdn(host), t)
 	var resp *dns.Msg
-	for _, dnServer := range []string{"8.8.8.8:53", "1.1.1.1:53", "223.5.5.5:53"} {
+	for _, dnServer := range []string{"8.8.8.8:53", "223.5.5.5:53"} {
 		resp, err = c.dnsExchange(dnServer, query, direct)
 		if err == nil {
 			break
@@ -155,7 +155,8 @@ func (c *TohClient) directLookupIP4(host string) (ips []net.IP, err error) {
 	return c.lookupIP(host, dns.TypeA, true)
 }
 
-func (c *TohClient) dial(ctx context.Context, network, addr string) (wsConn *nhooyrWSConn, remoteIP net.IP, remotePort int, err error) {
+func (c *TohClient) dial(ctx context.Context, network, addr string) (
+	wsConn *nhooyrWSConn, remoteIP net.IP, remotePort int, err error) {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		return
