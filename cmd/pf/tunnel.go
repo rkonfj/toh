@@ -19,6 +19,7 @@ type Options struct {
 	Forwards       []string
 	Server, ApiKey string
 	UDPBuf         int64
+	Keepalive      time.Duration
 }
 
 type TunnelManager struct {
@@ -39,6 +40,7 @@ func NewTunnelManager(opts Options) (*TunnelManager, error) {
 	c, err := client.NewTohClient(client.Options{
 		ServerAddr: opts.Server,
 		ApiKey:     opts.ApiKey,
+		Keepalive:  opts.Keepalive,
 	})
 
 	if err != nil {

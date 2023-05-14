@@ -1,6 +1,8 @@
 package pf
 
 import (
+	"time"
+
 	"github.com/spf13/cobra"
 )
 
@@ -15,6 +17,7 @@ func init() {
 	}
 	Cmd.Flags().StringP("server", "s", "", "the ToH server address")
 	Cmd.Flags().StringP("api-key", "k", "", "the ToH api-key for authcate")
+	Cmd.Flags().String("keepalive", "0s", "http/ws conn keepalive. 0s use system default")
 	Cmd.Flags().Int64("udp-buf", 1472, "the maximum UDP packet size")
 	Cmd.Flags().StringSliceP("forward", "f", []string{}, "tunnel mapping (i.e. udp/0.0.0.0:53/8.8.8.8:53)")
 
@@ -51,5 +54,13 @@ func processOptions(cmd *cobra.Command) (options Options, err error) {
 		return
 	}
 	options.UDPBuf, err = cmd.Flags().GetInt64("udp-buf")
+	if err != nil {
+		return
+	}
+	keepalive, err := cmd.Flags().GetString("keepalive")
+	if err != nil {
+		return
+	}
+	options.Keepalive, err = time.ParseDuration(keepalive)
 	return
 }

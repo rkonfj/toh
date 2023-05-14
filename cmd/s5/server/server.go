@@ -41,6 +41,7 @@ type Options struct {
 	DNSListen     string
 	DNSUpstream   string
 	DNSEvict      time.Duration
+	Keepalive     time.Duration
 }
 
 type TohServer struct {
@@ -155,6 +156,7 @@ func (s *S5Server) loadServers() (err error) {
 		c, err = client.NewTohClient(client.Options{
 			ServerAddr: srv.Api,
 			ApiKey:     srv.Key,
+			Keepalive:  s.opts.Keepalive,
 		})
 		if err != nil {
 			return

@@ -5,9 +5,17 @@ import (
 	"encoding/binary"
 	"net"
 	"net/http"
+	"time"
 
 	"github.com/sirupsen/logrus"
 )
+
+func MinDuration(x, y time.Duration) time.Duration {
+	if x < y {
+		return x
+	}
+	return y
+}
 
 func Uint16ToBytes(n uint16) []byte {
 	bytebuf := &bytes.Buffer{}

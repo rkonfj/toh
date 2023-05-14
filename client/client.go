@@ -28,6 +28,7 @@ type TohClient struct {
 type Options struct {
 	ServerAddr string
 	ApiKey     string
+	Keepalive  time.Duration
 }
 
 func NewTohClient(options Options) (*TohClient, error) {
@@ -70,7 +71,7 @@ func (c *TohClient) DialTCP(ctx context.Context, addr string) (net.Conn, error) 
 	if err != nil {
 		return nil, err
 	}
-	return spec.NewWSStreamConn(&NhooyrWSConn{conn}, &net.TCPAddr{IP: ip, Port: port}), nil
+	return spec.NewWSStreamConn(conn, &net.TCPAddr{IP: ip, Port: port}), nil
 }
 
 func (c *TohClient) DialUDP(ctx context.Context, addr string) (net.Conn, error) {
@@ -78,7 +79,7 @@ func (c *TohClient) DialUDP(ctx context.Context, addr string) (net.Conn, error) 
 	if err != nil {
 		return nil, err
 	}
-	return spec.NewWSStreamConn(&NhooyrWSConn{conn}, &net.UDPAddr{IP: ip, Port: port}), nil
+	return spec.NewWSStreamConn(conn, &net.UDPAddr{IP: ip, Port: port}), nil
 }
 
 func (c *TohClient) Stats() (s *api.Stats, err error) {
@@ -154,7 +155,7 @@ func (c *TohClient) directLookupIP4(host string) (ips []net.IP, err error) {
 	return c.lookupIP(host, dns.TypeA, true)
 }
 
-func (c *TohClient) dial(ctx context.Context, network, addr string) (conn *websocket.Conn, remoteIP net.IP, remotePort int, err error) {
+func (c *TohClient) dial(ctx context.Context, network, addr string) (wsConn *nhooyrWSConn, remoteIP net.IP, remotePort int, err error) {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		return
@@ -179,7 +180,7 @@ func (c *TohClient) dial(ctx context.Context, network, addr string) (conn *webso
 	handshake.Add("x-toh-addr", addr)
 
 	t1 := time.Now()
-	conn, _, err = websocket.Dial(ctx, c.options.ServerAddr, &websocket.DialOptions{
+	conn, _, err := websocket.Dial(ctx, c.options.ServerAddr, &websocket.DialOptions{
 		HTTPHeader: handshake, HTTPClient: c.httpClient,
 	})
 	if err != nil {
@@ -189,26 +190,55 @@ func (c *TohClient) dial(ctx context.Context, network, addr string) (conn *webso
 		}
 		return
 	}
-	logrus.Debugf("%s://%s established successfully, toh latency %s", network, addr, time.Since(t1))
+	wsConn = &nhooyrWSConn{Conn: conn,
+		pingInterval: c.options.Keepalive, lastActiveTime: time.Now()}
+	go wsConn.runPingLoop()
+	logrus.Debugf("%s://%s established successfully, toh latency %s",
+		network, addr, time.Since(t1))
 	return
 }
 
-type NhooyrWSConn struct {
+type nhooyrWSConn struct {
 	*websocket.Conn
+	pingInterval   time.Duration
+	lastActiveTime time.Time
 }
 
-func (c *NhooyrWSConn) Read(ctx context.Context) (b []byte, err error) {
+func (c *nhooyrWSConn) runPingLoop() {
+	if c.pingInterval == 0 {
+		return
+	}
+	for {
+		time.Sleep(c.pingInterval)
+		if time.Since(c.lastActiveTime) > 75*time.Second {
+			logrus.Debug("ping: exited. connection reached the max idle time")
+			break
+		}
+		ctx, cancel := context.WithTimeout(context.Background(),
+			spec.MinDuration(2*time.Second, c.pingInterval))
+		defer cancel()
+		err := c.Conn.Ping(ctx)
+		if err != nil {
+			logrus.Debug("ping: ", err)
+			break
+		}
+	}
+}
+
+func (c *nhooyrWSConn) Read(ctx context.Context) (b []byte, err error) {
 	_, b, err = c.Conn.Read(ctx)
+	c.lastActiveTime = time.Now()
 	return
 }
-func (c *NhooyrWSConn) Write(ctx context.Context, p []byte) error {
+func (c *nhooyrWSConn) Write(ctx context.Context, p []byte) error {
+	c.lastActiveTime = time.Now()
 	return c.Conn.Write(ctx, websocket.MessageBinary, p)
 }
 
-func (c *NhooyrWSConn) LocalAddr() net.Addr {
+func (c *nhooyrWSConn) LocalAddr() net.Addr {
 	return nil
 }
 
-func (c *NhooyrWSConn) Close(code int, reason string) error {
+func (c *nhooyrWSConn) Close(code int, reason string) error {
 	return c.Conn.Close(websocket.StatusCode(code), reason)
 }
