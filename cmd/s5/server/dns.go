@@ -96,10 +96,10 @@ func (s *S5Server) runDNSIfNeeded() {
 		return
 	}
 	if net.ParseIP(s.opts.DNSUpstream) != nil {
-		s.opts.DNSUpstream = s.opts.DNSUpstream + ":53"
+		s.opts.DNSUpstream = net.JoinHostPort(s.opts.DNSUpstream, "53")
 	}
 	if net.ParseIP(s.opts.DNSListen) != nil {
-		s.opts.DNSListen += ":53"
+		s.opts.DNSListen += net.JoinHostPort(s.opts.DNSListen, "53")
 	}
 	logrus.Infof("listen on %s for %s now", s.opts.DNSListen, s.opts.DNSUpstream)
 	udpServer := &dns.Server{Addr: s.opts.DNSListen, Net: "udp"}

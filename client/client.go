@@ -33,7 +33,7 @@ type Options struct {
 
 func NewTohClient(options Options) (*TohClient, error) {
 	if _, err := url.ParseRequestURI(options.Server); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("invalid server addr, %s", err.Error())
 	}
 	c := &TohClient{
 		options:   options,
