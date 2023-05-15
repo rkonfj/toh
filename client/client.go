@@ -47,11 +47,17 @@ func NewTohClient(options Options) (*TohClient, error) {
 					return
 				}
 
-				ips, err := c.directLookupIP4(host)
+				ips, err := c.directLookupIP(host, dns.TypeA)
+				if err == spec.ErrDNSTypeANotFound {
+					ips, err = c.directLookupIP(host, dns.TypeAAAA)
+					if err != nil {
+						return
+					}
+				}
 				if err != nil {
 					return
 				}
-				return (&net.Dialer{}).DialContext(ctx, network, fmt.Sprintf("%s:%s", ips[rand.Intn(len(ips))], port))
+				return (&net.Dialer{}).DialContext(ctx, network, net.JoinHostPort(ips[rand.Intn(len(ips))].String(), port))
 			},
 		},
 	}
@@ -144,15 +150,24 @@ func (c *TohClient) lookupIP(host string, t uint16, direct bool) (ips []net.IP, 
 		if a.Header().Rrtype == dns.TypeA {
 			ips = append(ips, a.(*dns.A).A)
 		}
+		if a.Header().Rrtype == dns.TypeAAAA {
+			ips = append(ips, a.(*dns.AAAA).AAAA)
+		}
 	}
 	if len(ips) == 0 {
-		err = fmt.Errorf("resolve %s : no type %s was found", host, dns.Type(t))
+		if t == dns.TypeA {
+			err = spec.ErrDNSTypeANotFound
+		} else if t == dns.TypeAAAA {
+			err = spec.ErrDNSTypeAAAANotFound
+		} else {
+			err = fmt.Errorf("resolve %s : no type %s was found", host, dns.Type(t))
+		}
 	}
 	return
 }
 
-func (c *TohClient) directLookupIP4(host string) (ips []net.IP, err error) {
-	return c.lookupIP(host, dns.TypeA, true)
+func (c *TohClient) directLookupIP(host string, t uint16) (ips []net.IP, err error) {
+	return c.lookupIP(host, t, true)
 }
 
 func (c *TohClient) dial(ctx context.Context, network, addr string) (
@@ -162,7 +177,7 @@ func (c *TohClient) dial(ctx context.Context, network, addr string) (
 		return
 	}
 
-	ips, err := c.directLookupIP4(host)
+	ips, err := c.directLookupIP(host, dns.TypeA)
 	if err != nil {
 		return
 	}

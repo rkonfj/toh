@@ -25,7 +25,7 @@ Usage:
 Flags:
       --acl string      file path for authentication (default "acl.json")
   -h, --help            help for serve
-  -l, --listen string   http server listen address (default "0.0.0.0:9986")
+  -l, --listen string   http server listen address (default "localhost:9986")
 
 Global Flags:
       --log-level string   logrus logger level (default "info")
@@ -40,14 +40,14 @@ time="2023-04-26T21:49:33+08:00" level=info msg="initializing ack file acl.json"
     ]
 }
 time="2023-04-26T21:49:33+08:00" level=info msg="acl: load 1 keys"
-time="2023-04-26T21:49:33+08:00" level=info msg="server listen on 0.0.0.0:9986 now"
+time="2023-04-26T21:49:33+08:00" level=info msg="server listen on localhost:9986 now"
 ```
 > the `key` here will using by `pf` and `s5` commands
 
 ### Caddy or Nginx wrap ToH server with TLS
 - Caddy
 ```sh
-$ caddy reverse-proxy --from https://fill-in-your-server-here.toh.sh --to 127.0.0.1:9986
+$ caddy reverse-proxy --from https://fill-in-your-server-here.toh.sh --to localhost:9986
 ```
 
 - Nginx
@@ -60,7 +60,7 @@ server {
 	ssl_certificate_key tls.key;
 
 	location /ws {
-		proxy_pass http://127.0.0.1:9986;
+		proxy_pass http://localhost:9986;
 		proxy_set_header Host $host;
 		proxy_set_header X-Real-IP $remote_addr;
 		proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

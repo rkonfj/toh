@@ -15,7 +15,7 @@ func init() {
 		RunE:  startAction,
 	}
 	Cmd.Flags().String("acl", "acl.json", "file path for authentication")
-	Cmd.Flags().StringP("listen", "l", "0.0.0.0:9986", "http server listen address")
+	Cmd.Flags().StringP("listen", "l", "localhost:9986", "http server listen address")
 }
 
 func startAction(cmd *cobra.Command, args []string) error {
