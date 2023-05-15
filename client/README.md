@@ -17,8 +17,8 @@ import (
 
 func main() {
 	c, err := client.NewTohClient(client.Options{
-		ServerAddr: "wss://us-l4-vultr.synf.in/ws",
-		ApiKey:     "5868a941-3025-4c6d-ad3a-41e29bb42e5f",
+		Server: "wss://fill-in-your-server-here.toh.sh/ws",
+		Key:    "5868a941-3025-4c6d-ad3a-41e29bb42e5f",
 	})
 	if err != nil {
 		panic(err)

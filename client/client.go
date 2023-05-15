@@ -26,13 +26,13 @@ type TohClient struct {
 }
 
 type Options struct {
-	ServerAddr string
-	ApiKey     string
-	Keepalive  time.Duration
+	Server, Key string
+	Keepalive   time.Duration
+	Headers     http.Header
 }
 
 func NewTohClient(options Options) (*TohClient, error) {
-	if _, err := url.ParseRequestURI(options.ServerAddr); err != nil {
+	if _, err := url.ParseRequestURI(options.Server); err != nil {
 		return nil, err
 	}
 	c := &TohClient{
@@ -86,7 +86,7 @@ func (c *TohClient) DialUDP(ctx context.Context, addr string) (net.Conn, error) 
 }
 
 func (c *TohClient) Stats() (s *api.Stats, err error) {
-	u, _ := url.ParseRequestURI(c.options.ServerAddr)
+	u, _ := url.ParseRequestURI(c.options.Server)
 	scheme := u.Scheme
 	if u.Scheme == "ws" {
 		scheme = "http"
@@ -95,7 +95,7 @@ func (c *TohClient) Stats() (s *api.Stats, err error) {
 	}
 	apiUrl := fmt.Sprintf("%s://%s/stats", scheme, u.Host)
 	req, err := http.NewRequest(http.MethodGet, apiUrl, nil)
-	req.Header.Add("x-toh-key", c.options.ApiKey)
+	req.Header.Add(spec.HeaderHandshakeKey, c.options.Key)
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return
@@ -191,12 +191,17 @@ func (c *TohClient) dial(ctx context.Context, network, addr string) (
 	remotePort = int(_port)
 
 	handshake := http.Header{}
-	handshake.Add("x-toh-key", c.options.ApiKey)
-	handshake.Add("x-toh-net", network)
-	handshake.Add("x-toh-addr", addr)
+	handshake.Add(spec.HeaderHandshakeKey, c.options.Key)
+	handshake.Add(spec.HeaderHandshakeNet, network)
+	handshake.Add(spec.HeaderHandshakeAddr, addr)
+	for k, v := range c.options.Headers {
+		for _, item := range v {
+			handshake.Add(k, item)
+		}
+	}
 
 	t1 := time.Now()
-	conn, _, err := websocket.Dial(ctx, c.options.ServerAddr, &websocket.DialOptions{
+	conn, _, err := websocket.Dial(ctx, c.options.Server, &websocket.DialOptions{
 		HTTPHeader: handshake, HTTPClient: c.httpClient,
 	})
 	if err != nil {

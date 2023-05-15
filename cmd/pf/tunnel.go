@@ -16,10 +16,10 @@ import (
 )
 
 type Options struct {
-	Forwards       []string
-	Server, ApiKey string
-	UDPBuf         int64
-	Keepalive      time.Duration
+	Forwards    []string
+	Server, Key string
+	UDPBuf      int64
+	Keepalive   time.Duration
 }
 
 type TunnelManager struct {
@@ -38,9 +38,9 @@ type mapping struct {
 
 func NewTunnelManager(opts Options) (*TunnelManager, error) {
 	c, err := client.NewTohClient(client.Options{
-		ServerAddr: opts.Server,
-		ApiKey:     opts.ApiKey,
-		Keepalive:  opts.Keepalive,
+		Server:    opts.Server,
+		Key:       opts.Key,
+		Keepalive: opts.Keepalive,
 	})
 
 	if err != nil {

@@ -44,12 +44,13 @@ type Options struct {
 }
 
 type TohServer struct {
-	Name        string   `yaml:"name"`
-	Api         string   `yaml:"api"`
-	Key         string   `yaml:"key"`
-	Ruleset     []string `yaml:"ruleset,omitempty"`
-	Healthcheck string   `yaml:"healthcheck,omitempty"`
-	Keepalive   string   `yaml:"keepalive,omitempty"`
+	Name        string      `yaml:"name"`
+	Addr        string      `yaml:"addr"`
+	Key         string      `yaml:"key"`
+	Ruleset     []string    `yaml:"ruleset,omitempty"`
+	Healthcheck string      `yaml:"healthcheck,omitempty"`
+	Keepalive   string      `yaml:"keepalive,omitempty"`
+	Headers     http.Header `yaml:"headers,omitempty"`
 }
 
 type ServerGroup struct {
@@ -154,8 +155,9 @@ func (s *S5Server) loadServers() (err error) {
 	for _, srv := range s.opts.Cfg.Servers {
 		var c *client.TohClient
 		opts := client.Options{
-			ServerAddr: srv.Api,
-			ApiKey:     srv.Key,
+			Server:  srv.Addr,
+			Key:     srv.Key,
+			Headers: srv.Headers,
 		}
 		if len(srv.Keepalive) > 0 {
 			opts.Keepalive, err = time.ParseDuration(srv.Keepalive)

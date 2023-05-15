@@ -16,13 +16,14 @@ func init() {
 		RunE:  startAction,
 	}
 	Cmd.Flags().StringP("server", "s", "", "the ToH server address")
-	Cmd.Flags().StringP("api-key", "k", "", "the ToH api-key for authcate")
+	Cmd.Flags().StringP("key", "k", "", "the ToH api-key for authcate")
 	Cmd.Flags().String("keepalive", "0s", "http/ws conn keepalive. 0s use system default")
 	Cmd.Flags().Int64("udp-buf", 1472, "the maximum UDP packet size")
 	Cmd.Flags().StringSliceP("forward", "f", []string{}, "tunnel mapping (i.e. udp/0.0.0.0:53/8.8.8.8:53)")
 
 	Cmd.MarkFlagRequired("server")
-	Cmd.MarkFlagRequired("api-key")
+	Cmd.MarkFlagRequired("key")
+	Cmd.MarkFlagRequired("forward")
 }
 
 func startAction(cmd *cobra.Command, args []string) error {
@@ -49,7 +50,7 @@ func processOptions(cmd *cobra.Command) (options Options, err error) {
 	if err != nil {
 		return
 	}
-	options.ApiKey, err = cmd.Flags().GetString("api-key")
+	options.Key, err = cmd.Flags().GetString("key")
 	if err != nil {
 		return
 	}

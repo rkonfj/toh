@@ -26,6 +26,10 @@ var (
 	ErrAuth                = errors.New("unauthorized, invalid ToH key")
 	ErrDNSTypeANotFound    = errors.New("type A record not found")
 	ErrDNSTypeAAAANotFound = errors.New("type AAAA record not found")
+
+	HeaderHandshakeKey  = "X-Toh-Key"
+	HeaderHandshakeNet  = "X-Toh-Net"
+	HeaderHandshakeAddr = "X-Toh-Addr"
 )
 
 // Dial describe the dial func
