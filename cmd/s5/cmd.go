@@ -28,7 +28,6 @@ func init() {
 	Cmd.Flags().String("dns-listen", "0.0.0.0:2053", "local dns")
 	Cmd.Flags().String("dns-evict", "2h", "local dns cache evict duration")
 	Cmd.Flags().String("dns-fake", "", "local fake dns (leave blank to disable fake dns)")
-	Cmd.Flags().String("keepalive", "0s", "http/ws conn keepalive. 0s use system default")
 }
 
 func startAction(cmd *cobra.Command, args []string) error {
@@ -74,15 +73,6 @@ func processOptions(cmd *cobra.Command) (opts server.Options, err error) {
 		return
 	}
 	opts.DNSEvict, err = time.ParseDuration(dnsEvict)
-	if err != nil {
-		return
-	}
-
-	keepalive, err := cmd.Flags().GetString("keepalive")
-	if err != nil {
-		return
-	}
-	opts.Keepalive, err = time.ParseDuration(keepalive)
 	if err != nil {
 		return
 	}

@@ -54,7 +54,7 @@ $ caddy reverse-proxy --from https://fill-in-your-server-here.toh.sh --to 127.0.
 ```
 server {
 	listen 443 ssl;
-	server_name us-l4-vultr.synf.in;
+	server_name fill-in-your-server-here.toh.sh;
 
 	ssl_certificate     tls.crt;
 	ssl_certificate_key tls.key;
@@ -123,7 +123,6 @@ Flags:
       --dns-fake string         local fake dns (leave blank to disable fake dns)
       --dns-listen string       local dns (default "0.0.0.0:2053")
   -h, --help                    help for s5
-      --keepalive string        http/ws conn keepalive. 0s use system default (default "0s")
 
 Global Flags:
       --log-level string   logrus logger level (default "info")

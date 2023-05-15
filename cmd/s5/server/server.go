@@ -41,7 +41,6 @@ type Options struct {
 	DNSListen     string
 	DNSUpstream   string
 	DNSEvict      time.Duration
-	Keepalive     time.Duration
 }
 
 type TohServer struct {
@@ -50,6 +49,7 @@ type TohServer struct {
 	Key         string   `yaml:"key"`
 	Ruleset     []string `yaml:"ruleset,omitempty"`
 	Healthcheck string   `yaml:"healthcheck,omitempty"`
+	Keepalive   string   `yaml:"keepalive,omitempty"`
 }
 
 type ServerGroup struct {
@@ -153,11 +153,17 @@ func (s *S5Server) Run() error {
 func (s *S5Server) loadServers() (err error) {
 	for _, srv := range s.opts.Cfg.Servers {
 		var c *client.TohClient
-		c, err = client.NewTohClient(client.Options{
+		opts := client.Options{
 			ServerAddr: srv.Api,
 			ApiKey:     srv.Key,
-			Keepalive:  s.opts.Keepalive,
-		})
+		}
+		if len(srv.Keepalive) > 0 {
+			opts.Keepalive, err = time.ParseDuration(srv.Keepalive)
+			if err != nil {
+				return
+			}
+		}
+		c, err = client.NewTohClient(opts)
 		if err != nil {
 			return
 		}
