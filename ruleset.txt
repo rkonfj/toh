@@ -22,6 +22,11 @@
 .github.com
 .githubusercontent.com
 
+! StackOverflow
+.stackoverflow.com
+.sstatic.net
+.superuser.com
+
 ! WiKi
 .wikipedia.org
 .wikimedia.org
@@ -43,4 +48,5 @@
 ! MISC
 .termux.com
 .medium.com
-
+.imgur.com
+.v2ex.com
