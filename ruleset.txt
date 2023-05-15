@@ -3,9 +3,12 @@
 
 ! Google
 .google.com
+.google.com.sg
+.google.com.hk
 .gmail.com
 .googleapis.com
 .googleusercontent.com
+.googlesource.com
 .gstatic.com
 .youtube.com
 .googlevideo.com
@@ -32,6 +35,12 @@
 ! Android
 .android.com
 
+! Linux Containers
+.bitnami.com
+.docker.com
+.k8s.io
+
 ! MISC
 .termux.com
 .medium.com
+
