@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -39,8 +40,13 @@ func BytesToUint16(bys []byte) uint16 {
 func RealIP(r *http.Request) string {
 	realIP := r.Header.Get("X-Real-IP")
 	if realIP != "" {
-		logrus.Debugf("resolve real ip from x-real-ip: %s", realIP)
+		logrus.Debugf("resolve real ip from X-Real-IP: %s", realIP)
 		return realIP
+	}
+	xff := r.Header.Get("X-Forwarded-For")
+	if xff != "" {
+		logrus.Debugf("resolve real ip from X-Forwarded-For: %s", realIP)
+		return strings.Split(strings.TrimSpace(xff), ",")[0]
 	}
 
 	tcpAddr, _ := net.ResolveTCPAddr("tcp", r.RemoteAddr)
