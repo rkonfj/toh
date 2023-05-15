@@ -50,9 +50,6 @@ func NewTohClient(options Options) (*TohClient, error) {
 				ips, err := c.directLookupIP(host, dns.TypeA)
 				if err == spec.ErrDNSTypeANotFound {
 					ips, err = c.directLookupIP(host, dns.TypeAAAA)
-					if err != nil {
-						return
-					}
 				}
 				if err != nil {
 					return
@@ -178,6 +175,9 @@ func (c *TohClient) dial(ctx context.Context, network, addr string) (
 	}
 
 	ips, err := c.directLookupIP(host, dns.TypeA)
+	if err == spec.ErrDNSTypeANotFound {
+		ips, err = c.directLookupIP(host, dns.TypeAAAA)
+	}
 	if err != nil {
 		return
 	}
