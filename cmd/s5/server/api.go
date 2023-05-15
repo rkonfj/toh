@@ -20,6 +20,12 @@ type GroupInfo struct {
 	Servers []ServerInfo `json:"servers"`
 }
 
+type OutboundInfo struct {
+	Group  string     `json:"group"`
+	Server ServerInfo `json:"server"`
+	Error  string     `json:"error"`
+}
+
 func (s *S5Server) listServers(w http.ResponseWriter, r *http.Request) {
 	servers := make([]ServerInfo, 0)
 	for _, ser := range s.servers {
@@ -55,4 +61,28 @@ func (s *S5Server) listGroups(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	json.NewEncoder(w).Encode(groups)
+}
+
+func (s *S5Server) outbound(w http.ResponseWriter, r *http.Request) {
+	host := r.URL.Query().Get("host")
+	selected := s.selectProxyServer(host)
+
+	outbound := OutboundInfo{
+		Group: selected.group,
+		Server: ServerInfo{
+			Name: "direct",
+		},
+	}
+
+	if selected.err != nil {
+		outbound.Error = selected.err.Error()
+	} else if selected.server != nil {
+		outbound.Server = ServerInfo{
+			Name:    selected.server.name,
+			Latency: selected.server.latency,
+			Limit:   selected.server.limit,
+		}
+	}
+
+	json.NewEncoder(w).Encode(outbound)
 }

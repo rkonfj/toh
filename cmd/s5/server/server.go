@@ -228,6 +228,7 @@ func (s *S5Server) printRulesetStats() {
 func (s *S5Server) registerHTTPHandlers() {
 	s.socks5Opts.HTTPHandlers["/servers"] = s.listServers
 	s.socks5Opts.HTTPHandlers["/groups"] = s.listGroups
+	s.socks5Opts.HTTPHandlers["/outbound"] = s.outbound
 }
 
 func (s *S5Server) dial(ctx context.Context, addr, network string) (
