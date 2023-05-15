@@ -144,10 +144,10 @@ func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (
 	case 1:
 		n, err = conn.Read(buf[:4])
 		if err != nil || n != 4 {
-			log.Debug("handle command error @2")
+			log.Error("socks5: can not get IPv4 addr")
 			return
 		}
-		addr = fmt.Sprintf("%d.%d.%d.%d", buf[0], buf[1], buf[2], buf[3])
+		addr = net.IP(buf[:4]).To4().String()
 	case 3:
 		n, err = conn.Read(buf[:1])
 		if err != nil || n != 1 {
@@ -161,8 +161,15 @@ func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (
 			return
 		}
 		addr = string(buf[:addrLen])
+	case 4:
+		n, err = conn.Read(buf[:16])
+		if err != nil || n != 16 {
+			log.Error("socks5: can not get IPv6 addr")
+			return
+		}
+		addr = net.IP(buf[:16]).String()
 	default:
-		log.Debug("handle command error @5")
+		log.Error("invalid ATYP ", atyp)
 		return
 	}
 
@@ -173,7 +180,7 @@ func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (
 	}
 	port := spec.BytesToUint16(buf[:2])
 
-	remoteAddr := fmt.Sprintf("%s:%d", addr, port)
+	remoteAddr := net.JoinHostPort(addr, fmt.Sprintf("%d", port))
 	switch cmd {
 	// 1. CONNECT
 	case 1:
@@ -214,7 +221,7 @@ func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (
 		return
 	// 3. do not support BIND now
 	default:
-		log.Debug("do not support BIND now")
+		log.Error("do not support BIND now")
 		respNotSupported(conn)
 	}
 	return

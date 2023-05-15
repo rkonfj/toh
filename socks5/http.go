@@ -81,7 +81,7 @@ func (s *HTTPProxyServer) handle(b []byte, originConn net.Conn) {
 				}
 				continue
 			}
-			s.responsePacScript(conn, fmt.Sprintf("%s:%s", host, port))
+			s.responsePacScript(conn, addr)
 			continue
 		}
 
