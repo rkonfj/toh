@@ -36,8 +36,8 @@ func NewTohServer(options Options) (*TohServer, error) {
 }
 
 func (s *TohServer) Run() {
-	http.HandleFunc("/stats", s.showStats)
-	http.HandleFunc("/", s.upgradeWebSocket)
+	http.HandleFunc("/stats", s.HandleShowStats)
+	http.HandleFunc("/", s.HandleUpgradeWebSocket)
 	s.startTrafficEventConsumeDaemon()
 	logrus.Infof("server listen on %s now", s.options.Listen)
 	err := http.ListenAndServe(s.options.Listen, nil)
@@ -46,10 +46,10 @@ func (s *TohServer) Run() {
 	}
 }
 
-func (s TohServer) upgradeWebSocket(w http.ResponseWriter, r *http.Request) {
-	apiKey := r.Header.Get("x-toh-key")
-	network := r.Header.Get("x-toh-net")
-	addr := r.Header.Get("x-toh-addr")
+func (s TohServer) HandleUpgradeWebSocket(w http.ResponseWriter, r *http.Request) {
+	apiKey := r.Header.Get(spec.HeaderHandshakeKey)
+	network := r.Header.Get(spec.HeaderHandshakeNet)
+	addr := r.Header.Get(spec.HeaderHandshakeAddr)
 	clientIP := spec.RealIP(r)
 
 	if err := s.acl.Check(apiKey); err != nil {

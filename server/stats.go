@@ -36,7 +36,7 @@ func (s *TohServer) startTrafficEventConsumeDaemon() {
 	}()
 }
 
-func (s TohServer) showStats(w http.ResponseWriter, r *http.Request) {
+func (s TohServer) HandleShowStats(w http.ResponseWriter, r *http.Request) {
 	apiKey := r.Header.Get("x-toh-key")
 	clientIP := spec.RealIP(r)
 	err := s.acl.Check(apiKey)
