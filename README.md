@@ -1,6 +1,6 @@
 # Introduction
 `ToH` is TCP/UDP over HTTP/WebSocket. In short, proxy your network over WebSocket
-![connect to refused nodes](overview.svg)
+![connect to refused nodes](overview.png)
 ## Table of contents
 - [ToH server](#toh-server)
 - [Caddy or Nginx wrap ToH server with TLS](#caddy-or-nginx-wrap-toh-server-with-tls)
