@@ -1,6 +1,6 @@
 # Introduction
 `ToH` is TCP/UDP over HTTP/WebSocket. In short, proxy your network over WebSocket
-
+![connect to refused nodes](overview.svg)
 ## Table of contents
 - [ToH server](#toh-server)
 - [Caddy or Nginx wrap ToH server with TLS](#caddy-or-nginx-wrap-toh-server-with-tls)
@@ -129,7 +129,7 @@ Global Flags:
 $ ./toh s5
 time="2023-05-12T15:02:11Z" level=info msg="initializing config file /root/.config/toh/socks5.yml"
 geoip2: country.mmdb
-listen: 0.0.0.0:2080
+listen: localhost:2080
 servers:
   - name: us1
     api: https://fill-in-your-server-here.toh.sh/ws
@@ -141,8 +141,7 @@ time="2023-05-12T15:02:11Z" level=info msg="downloading https://raw.githubuserco
 time="2023-05-12T15:02:14Z" level=info msg="ruleset   us1: special 0, direct 0, wildcard 21"
 time="2023-05-12T15:02:14Z" level=info msg="total loaded 1 proxy servers and 0 groups"
 time="2023-05-12T15:02:14Z" level=info msg="downloading /root/.config/toh/country.mmdb (this can take up to 5m0s)"
-time="2023-05-12T15:05:17Z" level=info msg="total loaded 1 proxy servers and 0 groups"
-time="2023-05-12T15:05:17Z" level=info msg="listen on 0.0.0.0:2080 for socks5 now"
+time="2023-05-12T15:05:17Z" level=info msg="listen on localhost:2080 for socks5 now"
 ```
 
 the server `us1` is the test server, will stopped in the future
