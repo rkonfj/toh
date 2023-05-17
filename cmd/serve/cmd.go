@@ -1,6 +1,7 @@
 package serve
 
 import (
+	"github.com/dustin/go-humanize"
 	"github.com/rkonfj/toh/server"
 	"github.com/spf13/cobra"
 )
@@ -15,6 +16,7 @@ func init() {
 		RunE:  startAction,
 	}
 	Cmd.Flags().String("acl", "acl.json", "file containing access control rules")
+	Cmd.Flags().String("copy-buf", "16Ki", "buffer size for copying network data")
 	Cmd.Flags().StringP("listen", "l", "localhost:9986", "http server listen address")
 }
 
@@ -37,5 +39,13 @@ func processServerOptions(cmd *cobra.Command) (options server.Options, err error
 		return
 	}
 	options.ACL, err = cmd.Flags().GetString("acl")
+	if err != nil {
+		return
+	}
+	copyBuf, err := cmd.Flags().GetString("copy-buf")
+	if err != nil {
+		return
+	}
+	options.Buf, err = humanize.ParseBytes(copyBuf)
 	return
 }

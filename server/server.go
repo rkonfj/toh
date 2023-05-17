@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"sync"
@@ -16,11 +17,13 @@ type TohServer struct {
 	options          Options
 	acl              *ACL
 	trafficEventChan chan *TrafficEvent
+	bufPool          *sync.Pool
 }
 
 type Options struct {
 	Listen string
 	ACL    string
+	Buf    uint64
 }
 
 func NewTohServer(options Options) (*TohServer, error) {
@@ -31,7 +34,11 @@ func NewTohServer(options Options) (*TohServer, error) {
 	return &TohServer{
 		options:          options,
 		acl:              acl,
-		trafficEventChan: make(chan *TrafficEvent, 4096),
+		trafficEventChan: make(chan *TrafficEvent, 2048),
+		bufPool: &sync.Pool{New: func() any {
+			buf := make([]byte, int(math.Max(float64(options.Buf), 512)))
+			return &buf
+		}},
 	}, nil
 }
 
@@ -91,11 +98,15 @@ func (s *TohServer) pipe(wsConn *websocket.Conn, netConn net.Conn) (lbc, rbc int
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		lbc, _ = io.Copy(netConn, RWWS(wsConn))
+		buf := s.bufPool.Get().(*[]byte)
+		defer s.bufPool.Put(buf)
+		lbc, _ = io.CopyBuffer(netConn, RWWS(wsConn), *buf)
 		logrus.Debugf("ws conn closed, close remote conn(%s) now", netConn.RemoteAddr().String())
 		netConn.Close()
 	}()
-	rbc, _ = io.Copy(RWWS(wsConn), netConn)
+	buf := s.bufPool.Get().(*[]byte)
+	defer s.bufPool.Put(buf)
+	rbc, _ = io.CopyBuffer(RWWS(wsConn), netConn, *buf)
 	logrus.Debugf("remote conn(%s) closed, close ws conn now", netConn.RemoteAddr().String())
 	wsConn.Close(websocket.StatusBadGateway, "remote close")
 	wg.Wait()
