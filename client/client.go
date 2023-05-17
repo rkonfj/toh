@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/miekg/dns"
@@ -54,7 +55,8 @@ func NewTohClient(options Options) (*TohClient, error) {
 				if err != nil {
 					return
 				}
-				return (&net.Dialer{}).DialContext(ctx, network, net.JoinHostPort(ips[rand.Intn(len(ips))].String(), port))
+				return (&net.Dialer{}).DialContext(ctx, network,
+					net.JoinHostPort(ips[rand.Intn(len(ips))].String(), port))
 			},
 		},
 	}
@@ -65,8 +67,37 @@ func (c *TohClient) DNSExchange(dnServer string, query *dns.Msg) (resp *dns.Msg,
 	return c.dnsExchange(dnServer, query, false)
 }
 
+// LookupIP lookup ipv4 and ipv6
+func (c *TohClient) LookupIP(host string) (ips []net.IP, err error) {
+	var wg sync.WaitGroup
+	wg.Add(1)
+	var e4, e6 error
+	go func() {
+		defer wg.Done()
+		_ips, e6 := c.LookupIP6(host)
+		if e6 == nil {
+			ips = append(ips, _ips...)
+		}
+	}()
+	_ips, e4 := c.lookupIP(host, dns.TypeA, false)
+	if e4 == nil {
+		ips = append(ips, _ips...)
+	}
+	wg.Wait()
+	if e4 != nil && e6 != nil {
+		err = fmt.Errorf("%s %s", e4.Error(), e6.Error())
+	}
+	return
+}
+
+// LookupIP4 lookup only ipv4
 func (c *TohClient) LookupIP4(host string) (ips []net.IP, err error) {
 	return c.lookupIP(host, dns.TypeA, false)
+}
+
+// LookupIP4 lookup only ipv6
+func (c *TohClient) LookupIP6(host string) (ips []net.IP, err error) {
+	return c.lookupIP(host, dns.TypeAAAA, false)
 }
 
 func (c *TohClient) DialTCP(ctx context.Context, addr string) (net.Conn, error) {
@@ -211,8 +242,7 @@ func (c *TohClient) dial(ctx context.Context, network, addr string) (
 		}
 		return
 	}
-	wsConn = &nhooyrWSConn{Conn: conn,
-		pingInterval: c.options.Keepalive, lastActiveTime: time.Now()}
+	wsConn = newNhooyrWSConn(conn, c.options.Keepalive)
 	go wsConn.runPingLoop()
 	logrus.Debugf("%s://%s established successfully, toh latency %s",
 		network, addr, time.Since(t1))
@@ -221,8 +251,18 @@ func (c *TohClient) dial(ctx context.Context, network, addr string) (
 
 type nhooyrWSConn struct {
 	*websocket.Conn
-	pingInterval   time.Duration
-	lastActiveTime time.Time
+	pingInterval    time.Duration
+	lastActiveTime  time.Time
+	connIdleTimeout time.Duration
+}
+
+func newNhooyrWSConn(conn *websocket.Conn, pingInterval time.Duration) *nhooyrWSConn {
+	return &nhooyrWSConn{
+		Conn:            conn,
+		pingInterval:    pingInterval,
+		lastActiveTime:  time.Now(),
+		connIdleTimeout: 75 * time.Second,
+	}
 }
 
 func (c *nhooyrWSConn) runPingLoop() {
@@ -231,8 +271,8 @@ func (c *nhooyrWSConn) runPingLoop() {
 	}
 	for {
 		time.Sleep(c.pingInterval)
-		if time.Since(c.lastActiveTime) > 75*time.Second {
-			logrus.Debug("ping: exited. connection reached the max idle time")
+		if time.Since(c.lastActiveTime) > c.connIdleTimeout {
+			logrus.Debug("ping: exited. connection reached the max idle time ", c.connIdleTimeout)
 			break
 		}
 		ctx, cancel := context.WithTimeout(context.Background(),

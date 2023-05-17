@@ -6,15 +6,16 @@ import (
 	"io"
 	"net"
 	"strings"
-	"sync"
 	"time"
 )
 
-// TohClient the toh client
+// TohClient the ToH client
 type TohClient interface {
 	DialTCP(ctx context.Context, address string) (net.Conn, error)
 	DialUDP(ctx context.Context, address string) (net.Conn, error)
+	LookupIP(host string) (ips []net.IP, err error)
 	LookupIP4(host string) (ips []net.IP, err error)
+	LookupIP6(host string) (ips []net.IP, err error)
 }
 
 // WSConn websocket connection which used to read, write and close data
@@ -154,18 +155,15 @@ func (c *WSStreamConn) SetWriteDeadline(t time.Time) error {
 	return nil
 }
 
-// TohPacketConn wrap UDP conn
+// PacketConnWrapper wrap UDP conn
 type PacketConnWrapper struct {
 	net.Conn
-	mu sync.Mutex
 }
 
 func (c *PacketConnWrapper) WriteTo(b []byte, addr net.Addr) (int, error) {
 	if c.RemoteAddr().String() != addr.String() {
 		return 0, errors.New("connection-oriented UDP does not allow write to another address")
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
 	return c.Conn.Write(b)
 }
 
