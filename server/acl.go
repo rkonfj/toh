@@ -84,7 +84,7 @@ func NewACL(aclPath string) (*ACL, error) {
 		if !os.IsNotExist(err) {
 			return nil, err
 		}
-		logrus.Infof("initializing ack file %s", aclPath)
+		logrus.Infof("initializing acl file %s", aclPath)
 		aclF, err = os.OpenFile(aclPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 		if err != nil {
 			return nil, err

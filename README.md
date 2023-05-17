@@ -24,14 +24,14 @@ Usage:
   toh serve [flags]
 
 Flags:
-      --acl string      file path for authentication (default "acl.json")
+      --acl string      file containing access control rules (default "acl.json")
   -h, --help            help for serve
   -l, --listen string   http server listen address (default "localhost:9986")
 
 Global Flags:
       --log-level string   logrus logger level (default "info")
 $ ./toh serve
-time="2023-04-26T21:49:33+08:00" level=info msg="initializing ack file acl.json"
+time="2023-04-26T21:49:33+08:00" level=info msg="initializing acl file acl.json"
 {
     "keys": [
         {

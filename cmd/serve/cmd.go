@@ -14,7 +14,7 @@ func init() {
 		Args:  cobra.NoArgs,
 		RunE:  startAction,
 	}
-	Cmd.Flags().String("acl", "acl.json", "file path for authentication")
+	Cmd.Flags().String("acl", "acl.json", "file containing access control rules")
 	Cmd.Flags().StringP("listen", "l", "localhost:9986", "http server listen address")
 }
 
