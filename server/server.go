@@ -47,14 +47,14 @@ func (s *TohServer) Run() {
 }
 
 func (s TohServer) HandleUpgradeWebSocket(w http.ResponseWriter, r *http.Request) {
-	apiKey := r.Header.Get(spec.HeaderHandshakeKey)
+	key := r.Header.Get(spec.HeaderHandshakeKey)
 	network := r.Header.Get(spec.HeaderHandshakeNet)
 	addr := r.Header.Get(spec.HeaderHandshakeAddr)
 	clientIP := spec.RealIP(r)
 
-	if err := s.acl.Check(apiKey); err != nil {
+	if err := s.acl.Check(key, network, addr); err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
-		logrus.Infof("%s -> %s://%s auth failed: %s", clientIP, network, addr, err.Error())
+		logrus.Infof("%s -> %s://%s %s", clientIP, network, addr, err.Error())
 		return
 	}
 
@@ -75,7 +75,7 @@ func (s TohServer) HandleUpgradeWebSocket(w http.ResponseWriter, r *http.Request
 		s.trafficEventChan <- &TrafficEvent{
 			In:         lbc,
 			Out:        rbc,
-			Key:        apiKey,
+			Key:        key,
 			Network:    network,
 			ClientIP:   clientIP,
 			RemoteAddr: addr,

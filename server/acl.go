@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,6 +19,8 @@ var (
 	ErrInvalidKey     error = errors.New("invalid key")
 	ErrInDataLimited  error = errors.New("network in-data reached the limit")
 	ErrOutDataLimited error = errors.New("network out-data reached the limit")
+
+	ErrServiceAccessDenied error = errors.New("service access denied")
 )
 
 type ACL struct {
@@ -33,17 +36,24 @@ type ACLStorage struct {
 }
 
 type Key struct {
-	Name          string          `json:"name"`
-	Key           string          `json:"key"`
-	BytesLimit    string          `json:"bytesLimit,omitempty"`
-	InBytesLimit  string          `json:"inBytesLimit,omitempty"`
-	OutBytesLimit string          `json:"outBytesLimit,omitempty"`
-	BytesUsage    *api.BytesUsage `json:"bytesUsage,omitempty"`
+	Name       string          `json:"name"`
+	Key        string          `json:"key"`
+	Limit      *Limit          `json:"limit,omitempty"`
+	BytesUsage *api.BytesUsage `json:"bytesUsage,omitempty"`
+}
+
+type Limit struct {
+	Bytes     string   `json:"bytes,omitempty"`
+	InBytes   string   `json:"inBytes,omitempty"`
+	OutBytes  string   `json:"outBytes,omitempty"`
+	Whitelist []string `json:"whitelist,omitempty"`
+	Blacklist []string `json:"blacklist,omitempty"`
 }
 
 type key struct {
 	bytesLimit, inBytesLimit, outBytesLimit uint64
 	bytesUsage                              *api.BytesUsage
+	whitelist, blacklist                    []string
 }
 
 func (k *key) inBytesLimited() bool {
@@ -113,26 +123,30 @@ func NewACL(aclPath string) (*ACL, error) {
 			ke.bytesUsage = k.BytesUsage
 		}
 		acl.keys[k.Key] = ke
-		if k.BytesLimit != "" {
-			b, err := humanize.ParseBytes(k.BytesLimit)
-			if err != nil {
-				return nil, err
+		if k.Limit != nil {
+			if k.Limit.Bytes != "" {
+				b, err := humanize.ParseBytes(k.Limit.Bytes)
+				if err != nil {
+					return nil, err
+				}
+				ke.bytesLimit = b
 			}
-			ke.bytesLimit = b
-		}
-		if k.InBytesLimit != "" {
-			b, err := humanize.ParseBytes(k.InBytesLimit)
-			if err != nil {
-				return nil, err
+			if k.Limit.InBytes != "" {
+				b, err := humanize.ParseBytes(k.Limit.InBytes)
+				if err != nil {
+					return nil, err
+				}
+				ke.inBytesLimit = b
 			}
-			ke.inBytesLimit = b
-		}
-		if k.OutBytesLimit != "" {
-			b, err := humanize.ParseBytes(k.OutBytesLimit)
-			if err != nil {
-				return nil, err
+			if k.Limit.OutBytes != "" {
+				b, err := humanize.ParseBytes(k.Limit.OutBytes)
+				if err != nil {
+					return nil, err
+				}
+				ke.outBytesLimit = b
 			}
-			ke.outBytesLimit = b
+			ke.blacklist = k.Limit.Blacklist
+			ke.whitelist = k.Limit.Whitelist
 		}
 	}
 	logrus.Infof("acl: load %d keys", len(acl.keys))
@@ -140,7 +154,7 @@ func NewACL(aclPath string) (*ACL, error) {
 	return acl, nil
 }
 
-func (a *ACL) Check(key string) error {
+func (a *ACL) CheckKey(key string) error {
 	if k, ok := a.keys[key]; ok {
 		if k.inBytesLimited() {
 			return ErrInDataLimited
@@ -151,6 +165,39 @@ func (a *ACL) Check(key string) error {
 		return nil
 	}
 	return ErrInvalidKey
+}
+
+func (a *ACL) Check(key, network, addr string) error {
+	err := a.CheckKey(key)
+	if err != nil {
+		return err
+	}
+	k := a.keys[key]
+	if k.whitelist != nil {
+		for _, a := range k.whitelist {
+			toMatch := strings.Split(strings.TrimSpace(a), "/")
+			if len(toMatch) == 1 && toMatch[0] == addr {
+				return nil
+			}
+			if len(toMatch) == 2 && toMatch[0] == addr && toMatch[1] == network {
+				return nil
+			}
+		}
+		return ErrServiceAccessDenied
+	}
+
+	if k.blacklist != nil {
+		for _, a := range k.blacklist {
+			toMatch := strings.Split(strings.TrimSpace(a), "/")
+			if len(toMatch) == 1 && toMatch[0] == addr {
+				return ErrServiceAccessDenied
+			}
+			if len(toMatch) == 2 && toMatch[0] == addr && toMatch[1] == network {
+				return ErrServiceAccessDenied
+			}
+		}
+	}
+	return nil
 }
 
 func (a *ACL) UpdateBytesUsage(key string, in, out uint64) {

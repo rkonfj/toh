@@ -39,7 +39,7 @@ func (s *TohServer) startTrafficEventConsumeDaemon() {
 func (s TohServer) HandleShowStats(w http.ResponseWriter, r *http.Request) {
 	apiKey := r.Header.Get(spec.HeaderHandshakeKey)
 	clientIP := spec.RealIP(r)
-	err := s.acl.Check(apiKey)
+	err := s.acl.CheckKey(apiKey)
 	if err == ErrInvalidKey {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
