@@ -16,6 +16,7 @@ func init() {
 		RunE:  startAction,
 	}
 	Cmd.Flags().String("acl", "acl.json", "file containing access control rules")
+	Cmd.Flags().String("admin", "", "admin key (leave blank to disable admin api)")
 	Cmd.Flags().String("copy-buf", "16Ki", "buffer size for copying network data")
 	Cmd.Flags().StringP("listen", "l", "localhost:9986", "http server listen address")
 }
@@ -39,6 +40,10 @@ func processServerOptions(cmd *cobra.Command) (options server.Options, err error
 		return
 	}
 	options.ACL, err = cmd.Flags().GetString("acl")
+	if err != nil {
+		return
+	}
+	options.Admin, err = cmd.Flags().GetString("admin")
 	if err != nil {
 		return
 	}

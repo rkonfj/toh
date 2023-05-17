@@ -24,10 +24,11 @@ type Options struct {
 	Listen string
 	ACL    string
 	Buf    uint64
+	Admin  string
 }
 
 func NewTohServer(options Options) (*TohServer, error) {
-	acl, err := NewACL(options.ACL)
+	acl, err := NewACL(options.ACL, options.Admin)
 	if err != nil {
 		return nil, err
 	}
@@ -43,9 +44,12 @@ func NewTohServer(options Options) (*TohServer, error) {
 }
 
 func (s *TohServer) Run() {
+	s.startTrafficEventConsumeDaemon()
+	s.registerAdminAPIIfEnabled()
+
 	http.HandleFunc("/stats", s.HandleShowStats)
 	http.HandleFunc("/", s.HandleUpgradeWebSocket)
-	s.startTrafficEventConsumeDaemon()
+
 	logrus.Infof("server listen on %s now", s.options.Listen)
 	err := http.ListenAndServe(s.options.Listen, nil)
 	if err != nil {

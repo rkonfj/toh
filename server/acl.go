@@ -24,6 +24,7 @@ var (
 )
 
 type ACL struct {
+	adminKey                  string
 	keys                      map[string]*key
 	stoFilePath               string
 	sto                       *ACLStorage
@@ -36,7 +37,7 @@ type ACLStorage struct {
 }
 
 type Key struct {
-	Name       string          `json:"name"`
+	Name       string          `json:"name,omitempty"`
 	Key        string          `json:"key"`
 	Limit      *Limit          `json:"limit,omitempty"`
 	BytesUsage *api.BytesUsage `json:"bytesUsage,omitempty"`
@@ -82,10 +83,14 @@ func (k *key) outBytesLimited() bool {
 	return k.bytesUsage.In+k.bytesUsage.Out >= k.bytesLimit
 }
 
-func NewACL(aclPath string) (*ACL, error) {
+func NewACL(aclPath, adminKey string) (*ACL, error) {
+	if len(adminKey) < 16 {
+		return nil, errors.New("the minimum admin key is 16 characters")
+	}
 	acl := &ACL{
 		keys:        make(map[string]*key),
 		stoFilePath: aclPath,
+		adminKey:    adminKey,
 	}
 
 	var sto ACLStorage
@@ -123,35 +128,15 @@ func NewACL(aclPath string) (*ACL, error) {
 			ke.bytesUsage = k.BytesUsage
 		}
 		acl.keys[k.Key] = ke
-		if k.Limit != nil {
-			if k.Limit.Bytes != "" {
-				b, err := humanize.ParseBytes(k.Limit.Bytes)
-				if err != nil {
-					return nil, err
-				}
-				ke.bytesLimit = b
-			}
-			if k.Limit.InBytes != "" {
-				b, err := humanize.ParseBytes(k.Limit.InBytes)
-				if err != nil {
-					return nil, err
-				}
-				ke.inBytesLimit = b
-			}
-			if k.Limit.OutBytes != "" {
-				b, err := humanize.ParseBytes(k.Limit.OutBytes)
-				if err != nil {
-					return nil, err
-				}
-				ke.outBytesLimit = b
-			}
-			ke.blacklist = k.Limit.Blacklist
-			ke.whitelist = k.Limit.Whitelist
-		}
+		acl.applyACLKeyLimit(ke, k.Limit)
 	}
 	logrus.Infof("acl: load %d keys", len(acl.keys))
 	go acl.aclPersistLoop()
 	return acl, nil
+}
+
+func (a *ACL) IsAdminAccess(key string) bool {
+	return a.adminKey != "" && a.adminKey == key
 }
 
 func (a *ACL) CheckKey(key string) error {
@@ -208,6 +193,83 @@ func (a *ACL) UpdateBytesUsage(key string, in, out uint64) {
 		a.stoUpdatePendingCount++
 		a.stoUpdatePendingCountLock.Unlock()
 	}
+}
+
+func (a *ACL) NewKey(name string) string {
+	k := uuid.NewString()
+
+	ke := &Key{
+		Name: name,
+		Key:  k,
+	}
+	a.keys[k] = &key{
+		bytesUsage: &api.BytesUsage{},
+	}
+	a.stoUpdatePendingCountLock.Lock()
+	defer a.stoUpdatePendingCountLock.Unlock()
+	a.sto.Keys = append(a.sto.Keys, ke)
+	a.stoUpdatePendingCount++
+	return k
+}
+
+func (a *ACL) DelKey(key string) {
+	a.stoUpdatePendingCountLock.Lock()
+	defer a.stoUpdatePendingCountLock.Unlock()
+	delete(a.keys, key)
+	a.stoUpdatePendingCount++
+	for i, v := range a.sto.Keys {
+		if v.Key == key {
+			a.sto.Keys = append(a.sto.Keys[:i], a.sto.Keys[i+1:]...)
+		}
+	}
+}
+
+// Limit replace key's limit
+func (a *ACL) Limit(key string, l *Limit) error {
+	a.stoUpdatePendingCountLock.Lock()
+	defer a.stoUpdatePendingCountLock.Unlock()
+	a.stoUpdatePendingCount++
+	if k, ok := a.keys[key]; ok {
+		err := a.applyACLKeyLimit(k, l)
+		if err != nil {
+			return err
+		}
+		for _, ke := range a.sto.Keys {
+			if ke.Key == key {
+				ke.Limit = l
+			}
+		}
+	}
+	return nil
+}
+
+func (a *ACL) applyACLKeyLimit(ke *key, l *Limit) error {
+	if l != nil {
+		if l.Bytes != "" {
+			b, err := humanize.ParseBytes(l.Bytes)
+			if err != nil {
+				return err
+			}
+			ke.bytesLimit = b
+		}
+		if l.InBytes != "" {
+			b, err := humanize.ParseBytes(l.InBytes)
+			if err != nil {
+				return err
+			}
+			ke.inBytesLimit = b
+		}
+		if l.OutBytes != "" {
+			b, err := humanize.ParseBytes(l.OutBytes)
+			if err != nil {
+				return err
+			}
+			ke.outBytesLimit = b
+		}
+		ke.blacklist = l.Blacklist
+		ke.whitelist = l.Whitelist
+	}
+	return nil
 }
 
 func (a *ACL) persist() error {

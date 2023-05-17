@@ -191,14 +191,21 @@ func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (
 			respHostUnreachable(conn)
 			return
 		}
-		conn.Write([]byte{0x05, 0x00, 0x00, 0x01})
+
 		if netConn.LocalAddr() != nil {
 			addrPort := netip.MustParseAddrPort(netConn.LocalAddr().String())
-			ip := addrPort.Addr().As4()
-			conn.Write(ip[:])
+			if addrPort.Addr().Is6() {
+				ip := addrPort.Addr().As16()
+				conn.Write([]byte{5, 0, 0, 4})
+				conn.Write(ip[:])
+			} else {
+				ip := addrPort.Addr().As4()
+				conn.Write([]byte{5, 0, 0, 1})
+				conn.Write(ip[:])
+			}
 			conn.Write(spec.Uint16ToBytes(addrPort.Port()))
 		} else {
-			conn.Write([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
+			conn.Write([]byte{5, 0, 0, 1, 0, 0, 0, 0, 0, 0})
 		}
 		closeConn = false
 		return

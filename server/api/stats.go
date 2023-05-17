@@ -12,3 +12,7 @@ type BytesUsage struct {
 	In  uint64 `json:"in"`
 	Out uint64 `json:"out"`
 }
+
+type AdminStats struct {
+	ConnCount int64 `json:"connCount"`
+}
