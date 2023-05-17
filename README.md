@@ -6,6 +6,7 @@
 - [Caddy or Nginx wrap ToH server with TLS](#caddy-or-nginx-wrap-toh-server-with-tls)
 - [Port-forward tool `pf` act as ToH client](#port-forward-tool-pf-act-as-toh-client)
 - [Socks5+http proxy server `s5` act as ToH client](#socks5http-proxy-server-s5-act-as-toh-client)
+- [Android project `tohdroid` act as ToH client](#android-project-tohdroid-act-as-toh-client)
 
 ### ToH server
 - Build
@@ -152,3 +153,6 @@ $ https_proxy=socks5://127.0.0.1:2080 curl -i https://api64.ipify.org
 104.207.152.45
 ```
 thats great! the `104.207.152.45` is your proxy ip
+
+### Android project `tohdroid` act as ToH client
+see project [tohdroid](https://github.com/rkonfj/tohdroid)
