@@ -37,14 +37,14 @@ func (s *TohServer) startTrafficEventConsumeDaemon() {
 }
 
 func (s TohServer) HandleShowStats(w http.ResponseWriter, r *http.Request) {
-	apiKey := r.Header.Get("x-toh-key")
+	apiKey := r.Header.Get(spec.HeaderHandshakeKey)
 	clientIP := spec.RealIP(r)
 	err := s.acl.Check(apiKey)
 	if err == ErrInvalidKey {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
-	logrus.Infof("ip %s query %s stats", clientIP, apiKey)
+	logrus.Debugf("ip %s query %s stats", clientIP, apiKey)
 	key := s.acl.keys[apiKey]
 	stats := api.Stats{
 		BytesUsage: key.bytesUsage,
