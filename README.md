@@ -116,12 +116,13 @@ Usage:
   toh s5 [flags]
 
 Flags:
-  -c, --config string           config file (default is $HOME/.config/toh/socks5.yml)
-      --dns string              local dns upstream (leave blank to disable local dns)
-      --dns-evict string        local dns cache evict duration (default "2h")
-      --dns-fake string         local fake dns (leave blank to disable fake dns)
-      --dns-listen string       local dns (default "0.0.0.0:2053")
-  -h, --help                    help for s5
+  -c, --config string       config file (default is $HOME/.config/toh/socks5.yml)
+      --dns string          local dns upstream (leave blank to disable local dns)
+      --dns-evict string    local dns cache evict duration (default "2h")
+      --dns-fake string     local fake dns (leave blank to disable fake dns)
+      --dns-listen string   local dns listen address (default "0.0.0.0:2053")
+  -h, --help                help for s5
+  -l, --listen string       socks5+http listen address (specify this to override from config)
 
 Global Flags:
       --log-level string   logrus logger level (default "info")

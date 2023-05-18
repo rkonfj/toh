@@ -28,6 +28,8 @@ import (
 type Options struct {
 	// config from file
 	Cfg Config
+	// socks5+http listen address (specify this to override from config)
+	Listen string
 	// data root directory. i.e. $HOME/.config/toh
 	DataRoot string
 	// when using socks5 proxy dns query, if the query dns is consistent with the fake ip
@@ -90,12 +92,19 @@ func NewS5Server(opts Options) (s5Server *S5Server, err error) {
 
 	s5Server.socks5Opts = socks5.Options{
 		Listen:               opts.Cfg.Listen,
-		AdvertiseIP:          opts.Cfg.Advertise.IP,
-		AdvertisePort:        opts.Cfg.Advertise.Port,
 		TCPDialContext:       s5Server.dialTCP,
 		UDPDialContext:       s5Server.dialUDP,
 		TrafficEventConsumer: logTrafficEvent,
 		HTTPHandlers:         make(map[string]socks5.Handler),
+	}
+
+	if opts.Cfg.Advertise != nil {
+		s5Server.socks5Opts.AdvertiseIP = opts.Cfg.Advertise.IP
+		s5Server.socks5Opts.AdvertisePort = opts.Cfg.Advertise.Port
+	}
+
+	if len(opts.Listen) > 0 {
+		s5Server.socks5Opts.Listen = opts.Listen
 	}
 
 	s5Server.dns = D.NewDNS(D.Options{

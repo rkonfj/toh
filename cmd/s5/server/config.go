@@ -41,6 +41,7 @@ type TohServer struct {
 }
 
 type ServerGroup struct {
+	// name to identify the server group
 	Name string `yaml:"name"`
 	// toh server name list from `servers` section
 	Servers []string `yaml:"servers"`
