@@ -69,10 +69,7 @@ func (s *S5Server) testDomainOnGroup(host string, group *Group) (proxy selected)
 func (s *S5Server) testIPOnGroup(host string, group *Group) (proxy selected) {
 	ip := net.ParseIP(host)
 	if ip == nil {
-		ips, err := s.dnsCache.LookupIP(host)
-		if len(ips) == 0 {
-			ips, err = group.selectServer().client.LookupIP(host)
-		}
+		ips, err := s.dns.LookupIP(host, group.selectServer().client.DNSExchange)
 		if err != nil {
 			proxy.err = err
 			return
@@ -134,7 +131,7 @@ func (s *S5Server) testDomainOnServer(host string, server *Server) (proxy select
 func (s *S5Server) testIPOnServer(host string, server *Server) (proxy selected) {
 	ip := net.ParseIP(host)
 	if ip == nil {
-		ips, err := server.client.LookupIP(host)
+		ips, err := s.dns.LookupIP(host, server.client.DNSExchange)
 		if err != nil {
 			proxy.err = err
 			return
@@ -157,7 +154,7 @@ func (s *S5Server) testIPOnServer(host string, server *Server) (proxy selected) 
 
 func (s *S5Server) selectProxyServer(host string) (proxy selected) {
 	// reverse resolution
-	if hosts, ok := s.dnsCache.Hosts(host); ok {
+	if hosts, err := s.dns.ReverseLookup(host); err == nil {
 		host = hosts[0]
 		proxy.reverseResolutionHost = &hosts[0]
 	}
@@ -226,5 +223,26 @@ func (s *S5Server) selectProxyServer(host string) (proxy selected) {
 		}
 	}
 	proxy.server = nil
+	return
+}
+
+// selectDNSProxyServer use ruleset.OnlyDomainMatch or random server
+func (s *S5Server) selectDNSProxyServer(host string) (proxy selected) {
+	if len(s.groups) > 0 {
+		for _, group := range s.groups {
+			proxy = s.testDomainOnGroup(host, group)
+			if proxy.server != nil {
+				return
+			}
+		}
+	}
+
+	for _, server := range s.servers {
+		proxy = s.testDomainOnServer(host, server)
+		if proxy.server != nil {
+			return
+		}
+	}
+	proxy.server = selectServer(s.servers)
 	return
 }

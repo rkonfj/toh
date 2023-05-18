@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"net"
 	"net/http"
 	"os"
@@ -17,6 +16,7 @@ import (
 	"github.com/miekg/dns"
 	"github.com/oschwald/geoip2-golang"
 	"github.com/rkonfj/toh/client"
+	D "github.com/rkonfj/toh/dns"
 	"github.com/rkonfj/toh/ruleset"
 	"github.com/rkonfj/toh/server/api"
 	"github.com/rkonfj/toh/socks5"
@@ -60,15 +60,13 @@ type ServerGroup struct {
 }
 
 type S5Server struct {
-	opts           Options
-	socks5Opts     socks5.Options
-	servers        []*Server
-	groups         []*Group
-	defaultDialer  net.Dialer
-	geoip2db       *geoip2.Reader
-	dnsClient      *dns.Client
-	dnsCache       *dnsCache
-	dnsCacheTicker *time.Ticker
+	opts          Options
+	socks5Opts    socks5.Options
+	servers       []*Server
+	groups        []*Group
+	defaultDialer net.Dialer
+	geoip2db      *geoip2.Reader
+	dns           *D.DomainNameServer
 }
 
 type Server struct {
@@ -106,13 +104,6 @@ func NewS5Server(opts Options) (s5Server *S5Server, err error) {
 		servers:       []*Server{},
 		groups:        []*Group{},
 		defaultDialer: net.Dialer{},
-		dnsClient:     &dns.Client{},
-		dnsCache: &dnsCache{
-			cache:     make(map[string]*cacheEntry),
-			hostCache: make(map[string]*hostCacheEntry),
-		},
-		dnsCacheTicker: time.NewTicker(
-			time.Duration(math.Max(float64(opts.DNSEvict/20), float64(time.Minute)))),
 	}
 
 	s5Server.socks5Opts = socks5.Options{
@@ -124,6 +115,13 @@ func NewS5Server(opts Options) (s5Server *S5Server, err error) {
 		TrafficEventConsumer: logTrafficEvent,
 		HTTPHandlers:         make(map[string]socks5.Handler),
 	}
+
+	s5Server.dns = D.NewDNS(D.Options{
+		Listen:   opts.DNSListen,
+		Upstream: opts.DNSUpstream,
+		Evict:    opts.DNSEvict,
+		Exchange: s5Server.dnsExchange,
+	})
 
 	err = s5Server.loadServers()
 	if err != nil {
@@ -151,7 +149,7 @@ func (s *S5Server) Run() error {
 	}
 
 	go s.openGeoip2()
-	go s.runDNSIfNeeded()
+	go s.dns.Run()
 	return ss.Run()
 }
 
@@ -293,6 +291,27 @@ func (s *S5Server) dialUDP(ctx context.Context, addr string) (
 		return
 	}
 	return s.dial(ctx, addr, "udp")
+}
+
+func (s *S5Server) dnsExchange(dnServer string, clientAddr string, r *dns.Msg) (resp *dns.Msg, err error) {
+	proxy := s.selectDNSProxyServer(strings.Trim(r.Question[0].Name, "."))
+	if proxy.err != nil {
+		err = proxy.err
+		return
+	}
+	log := logrus.WithField(spec.AppAddr.String(), clientAddr)
+	if proxy.ok() {
+		resp, proxy.err = proxy.server.client.DNSExchange(dnServer, r)
+		if proxy.err != nil {
+			err = proxy.err
+			return
+		}
+		log.Infof("dns query %s type %s using %s latency %s",
+			r.Question[0].Name, dns.Type(r.Question[0].Qtype).String(), proxy.id(), proxy.server.latency)
+		return
+	}
+	log.Infof("dns query %s type %s using direct", r.Question[0].Name, dns.Type(r.Question[0].Qtype).String())
+	return
 }
 
 func (s *S5Server) openGeoip2() {
