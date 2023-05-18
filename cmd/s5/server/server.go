@@ -164,8 +164,9 @@ func (s *S5Server) loadServers() (err error) {
 		}
 
 		server := &Server{
-			name:   srv.Name,
-			client: c,
+			name:    srv.Name,
+			client:  c,
+			latency: 5 * time.Minute,
 			httpClient: &http.Client{
 				Timeout: 300 * time.Second,
 				Transport: &http.Transport{
