@@ -73,11 +73,12 @@ func (c *TohClient) LookupIP(host string) (ips []net.IP, err error) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	var e4, e6 error
+	var ip6 []net.IP
 	go func() {
 		defer wg.Done()
 		_ips, e6 := c.LookupIP6(host)
 		if e6 == nil {
-			ips = append(ips, _ips...)
+			ip6 = append(ip6, _ips...)
 		}
 	}()
 	_ips, e4 := c.lookupIP(host, dns.TypeA, false)
@@ -85,6 +86,7 @@ func (c *TohClient) LookupIP(host string) (ips []net.IP, err error) {
 		ips = append(ips, _ips...)
 	}
 	wg.Wait()
+	ips = append(ips, ip6...)
 	if e4 != nil && e6 != nil {
 		err = fmt.Errorf("%s %s", e4.Error(), e6.Error())
 	}
