@@ -25,11 +25,7 @@ func main() {
 	}
 
 	httpClient := &http.Client{
-		Transport: &http.Transport{
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				return c.DialTCP(ctx, addr)
-			},
-		},
+		Transport: &http.Transport{DialContext: c.DialContext},
 	}
 
 	resp, err := httpClient.Get("https://api64.ipify.org")

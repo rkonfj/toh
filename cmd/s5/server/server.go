@@ -17,7 +17,7 @@ import (
 	"github.com/miekg/dns"
 	"github.com/oschwald/geoip2-golang"
 	"github.com/rkonfj/toh/client"
-	"github.com/rkonfj/toh/cmd/s5/ruleset"
+	"github.com/rkonfj/toh/ruleset"
 	"github.com/rkonfj/toh/server/api"
 	"github.com/rkonfj/toh/socks5"
 	"github.com/rkonfj/toh/spec"
@@ -183,7 +183,7 @@ func (s *S5Server) loadServers() (err error) {
 			},
 		}
 		if srv.Ruleset != nil {
-			server.ruleset, err = ruleset.Parse(c, srv.Name, srv.Ruleset, s.opts.DataRoot)
+			server.ruleset, err = ruleset.Parse(srv.Name, s.opts.DataRoot, srv.Ruleset, c.DialContext)
 			if err != nil {
 				return
 			}
@@ -210,7 +210,8 @@ func (s *S5Server) loadGroups() (err error) {
 			continue
 		}
 		if g.Ruleset != nil {
-			group.ruleset, err = ruleset.Parse(selectServer(group.servers).client, g.Name, g.Ruleset, s.opts.DataRoot)
+			group.ruleset, err = ruleset.Parse(g.Name, s.opts.DataRoot, g.Ruleset,
+				selectServer(group.servers).client.DialContext)
 			if err != nil {
 				return
 			}

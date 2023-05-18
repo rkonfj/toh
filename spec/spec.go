@@ -13,6 +13,7 @@ import (
 type TohClient interface {
 	DialTCP(ctx context.Context, address string) (net.Conn, error)
 	DialUDP(ctx context.Context, address string) (net.Conn, error)
+	DialContext(ctx context.Context, network, address string) (net.Conn, error)
 	LookupIP(host string) (ips []net.IP, err error)
 	LookupIP4(host string) (ips []net.IP, err error)
 	LookupIP6(host string) (ips []net.IP, err error)

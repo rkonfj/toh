@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand"
 	"net"
@@ -101,21 +102,25 @@ func (c *TohClient) LookupIP6(host string) (ips []net.IP, err error) {
 }
 
 func (c *TohClient) DialTCP(ctx context.Context, addr string) (net.Conn, error) {
-	conn, ip, port, err := c.dial(ctx, "tcp", addr)
-	if err != nil {
-		return nil, err
-	}
-	return spec.NewWSStreamConn(conn, &net.TCPAddr{IP: ip, Port: port}), nil
+	return c.DialContext(ctx, "tcp", addr)
 }
 
 func (c *TohClient) DialUDP(ctx context.Context, addr string) (net.Conn, error) {
-	conn, ip, port, err := c.dial(ctx, "udp", addr)
-	if err != nil {
-		return nil, err
-	}
-	return spec.NewWSStreamConn(conn, &net.UDPAddr{IP: ip, Port: port}), nil
+	return c.DialContext(ctx, "udp", addr)
 }
 
+func (c *TohClient) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	switch network {
+	case "tcp", "tcp4", "tcp6", "udp", "udp4", "udp6":
+		conn, addr, err := c.dial(ctx, network, address)
+		if err != nil {
+			return nil, err
+		}
+		return spec.NewWSStreamConn(conn, addr), nil
+	default:
+		return nil, errors.New("unsupport network")
+	}
+}
 func (c *TohClient) Stats() (s *api.Stats, err error) {
 	u, _ := url.ParseRequestURI(c.options.Server)
 	scheme := u.Scheme
@@ -199,7 +204,7 @@ func (c *TohClient) directLookupIP(host string, t uint16) (ips []net.IP, err err
 }
 
 func (c *TohClient) dial(ctx context.Context, network, addr string) (
-	wsConn *nhooyrWSConn, remoteIP net.IP, remotePort int, err error) {
+	wsConn *nhooyrWSConn, remoteAddr net.Addr, err error) {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		return
@@ -218,8 +223,21 @@ func (c *TohClient) dial(ctx context.Context, network, addr string) (
 		return
 	}
 
-	remoteIP = ips[rand.Intn(len(ips))]
-	remotePort = int(_port)
+	switch network {
+	case "tcp", "tcp4", "tcp6":
+		remoteAddr = &net.TCPAddr{
+			IP:   ips[rand.Intn(len(ips))],
+			Port: int(_port),
+		}
+	case "udp", "udp4", "udp6":
+		remoteAddr = &net.UDPAddr{
+			IP:   ips[rand.Intn(len(ips))],
+			Port: int(_port),
+		}
+	default:
+		err = spec.ErrUnsupportNetwork
+		return
+	}
 
 	handshake := http.Header{}
 	handshake.Add(spec.HeaderHandshakeKey, c.options.Key)

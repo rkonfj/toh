@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/rkonfj/toh/spec"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/exp/slices"
 )
@@ -22,8 +21,8 @@ import (
 var cache = make(map[string][]byte)
 
 type Ruleset struct {
-	client           spec.TohClient
-	proxy            string
+	dial             func(ctx context.Context, network, addr string) (net.Conn, error)
+	name             string
 	directCountrySet []string
 	proxyCountrySet  []string
 	specialSet       []string
@@ -31,8 +30,9 @@ type Ruleset struct {
 	wildcardSet      []string
 }
 
-func Parse(client spec.TohClient, name string, ruleset []string, datapath string) (rs *Ruleset, err error) {
-	rs = &Ruleset{proxy: name, client: client}
+func Parse(name, dataRoot string, ruleset []string,
+	dial func(ctx context.Context, network, addr string) (net.Conn, error)) (rs *Ruleset, err error) {
+	rs = &Ruleset{name: name, dial: dial}
 	for _, ruleLocation := range ruleset {
 		var reader io.Reader
 		var readCloser io.ReadCloser
@@ -42,7 +42,7 @@ func Parse(client spec.TohClient, name string, ruleset []string, datapath string
 			} else if strings.HasPrefix(r, "rule:") {
 				readCloser = io.NopCloser(strings.NewReader(r[5:] + "\n"))
 			} else {
-				readCloser, err = rs.openFile(ensureAbsPath(datapath, r))
+				readCloser, err = rs.openFile(ensureAbsPath(dataRoot, r))
 			}
 			if err != nil {
 				return
@@ -54,7 +54,7 @@ func Parse(client spec.TohClient, name string, ruleset []string, datapath string
 			} else if strings.HasPrefix(r, "rule:") {
 				readCloser = io.NopCloser(strings.NewReader(r[5:] + "\n"))
 			} else {
-				readCloser, err = rs.openFile(ensureAbsPath(datapath, r))
+				readCloser, err = rs.openFile(ensureAbsPath(dataRoot, r))
 			}
 			if err != nil {
 				return
@@ -83,30 +83,9 @@ func (rs *Ruleset) PrintStats() {
 		ipRules = fmt.Sprintf(", if-ip proxy %s", rs.proxyCountrySet)
 	}
 	logrus.Infof("ruleset %5s: special %d, direct %d, wildcard %d%s",
-		rs.proxy, len(rs.specialSet), len(rs.directSet), len(rs.wildcardSet), ipRules)
+		rs.name, len(rs.specialSet), len(rs.directSet), len(rs.wildcardSet), ipRules)
 }
 
-func (rs *Ruleset) download(ruleLocation string) (reader io.ReadCloser, err error) {
-	if b, ok := cache[ruleLocation]; ok {
-		return io.NopCloser(bytes.NewReader(b)), nil
-	}
-	logrus.Infof("downloading %s", ruleLocation)
-	b, err := readFromURL(rs.client, ruleLocation)
-	if err != nil {
-		return
-	}
-	cache[ruleLocation] = b
-	reader = io.NopCloser(bytes.NewReader(b))
-	return
-}
-
-func (rs *Ruleset) openFile(ruleLocation string) (reader io.ReadCloser, err error) {
-	reader, err = os.Open(ruleLocation)
-	if err != nil {
-		return
-	}
-	return
-}
 func (rs *Ruleset) LoadFromReader(reader bufio.Reader) error {
 	for {
 		l, err := reader.ReadString('\n')
@@ -193,18 +172,36 @@ func (rs *Ruleset) CountryMatch(country string) bool {
 	return slices.Contains(rs.proxyCountrySet, country)
 }
 
+func (rs *Ruleset) download(ruleLocation string) (reader io.ReadCloser, err error) {
+	if b, ok := cache[ruleLocation]; ok {
+		return io.NopCloser(bytes.NewReader(b)), nil
+	}
+	logrus.Infof("downloading %s", ruleLocation)
+	b, err := readFromURL(rs.dial, ruleLocation)
+	if err != nil {
+		return
+	}
+	cache[ruleLocation] = b
+	reader = io.NopCloser(bytes.NewReader(b))
+	return
+}
+
+func (rs *Ruleset) openFile(ruleLocation string) (reader io.ReadCloser, err error) {
+	reader, err = os.Open(ruleLocation)
+	if err != nil {
+		return
+	}
+	return
+}
+
 func trim(s string) string {
 	return strings.Trim(strings.Trim(s, "\n"), " ")
 }
 
-func readFromURL(client spec.TohClient, url string) ([]byte, error) {
+func readFromURL(dial func(ctx context.Context, network, addr string) (net.Conn, error), url string) ([]byte, error) {
 	resp, err := (&http.Client{
-		Timeout: 15 * time.Second,
-		Transport: &http.Transport{
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				return client.DialTCP(ctx, addr)
-			},
-		},
+		Timeout:   15 * time.Second,
+		Transport: &http.Transport{DialContext: dial},
 	}).Get(url)
 	if err != nil {
 		return nil, err

@@ -27,6 +27,8 @@ var (
 	ErrDNSTypeANotFound    = errors.New("type A record not found")
 	ErrDNSTypeAAAANotFound = errors.New("type AAAA record not found")
 
+	ErrUnsupportNetwork = errors.New("unsupport network")
+
 	HeaderHandshakeKey  = "X-Toh-Key"
 	HeaderHandshakeNet  = "X-Toh-Net"
 	HeaderHandshakeAddr = "X-Toh-Addr"
