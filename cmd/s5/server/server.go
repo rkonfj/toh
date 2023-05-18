@@ -26,37 +26,62 @@ import (
 )
 
 type Config struct {
-	Geoip2  string        `yaml:"geoip2"`
-	Listen  string        `yaml:"listen"`
-	Servers []TohServer   `yaml:"servers"`
-	Groups  []ServerGroup `yaml:"groups,omitempty"`
+	// maxmind geoip2 db path
+	Geoip2 string `yaml:"geoip2"`
+	// socks5+http proxy server listen addr
+	Listen string `yaml:"listen"`
+	// advertised server addr
+	Advertise *Advertise `yaml:"advertise,omitempty"`
+	// toh server list
+	Servers []TohServer `yaml:"servers"`
+	// group toh servers
+	Groups []ServerGroup `yaml:"groups,omitempty"`
 }
 
-type Options struct {
-	Cfg           Config
-	AdvertiseIP   string
-	AdvertisePort uint16
-	DataRoot      string
-	DNSFake       string
-	DNSListen     string
-	DNSUpstream   string
-	DNSEvict      time.Duration
+type Advertise struct {
+	IP   string `yaml:"ip,omitempty"`
+	Port uint16 `yaml:"port,omitempty"`
 }
 
 type TohServer struct {
-	Name        string      `yaml:"name"`
-	Addr        string      `yaml:"addr"`
-	Key         string      `yaml:"key"`
-	Ruleset     []string    `yaml:"ruleset,omitempty"`
-	Healthcheck string      `yaml:"healthcheck,omitempty"`
-	Keepalive   string      `yaml:"keepalive,omitempty"`
-	Headers     http.Header `yaml:"headers,omitempty"`
+	// name to identify the toh server
+	Name string `yaml:"name"`
+	// toh server adderss. i.e. https://fill-in-your-server-here.toh.sh/ws
+	Addr string `yaml:"addr"`
+	// toh server authcate key
+	Key string `yaml:"key"`
+	// this server is used when the remote accessed by the user hits this ruleset
+	Ruleset []string `yaml:"ruleset,omitempty"`
+	// url that responds to any http status code
+	Healthcheck string `yaml:"healthcheck,omitempty"`
+	// the interval send ping to the under websocket conn for keepalive
+	Keepalive string `yaml:"keepalive,omitempty"`
+	// customize the request header sent to the toh server
+	Headers http.Header `yaml:"headers,omitempty"`
 }
 
 type ServerGroup struct {
-	Name    string   `yaml:"name"`
+	Name string `yaml:"name"`
+	// toh server name list from `servers` section
 	Servers []string `yaml:"servers"`
+	// same as `servers` section
 	Ruleset []string `yaml:"ruleset"`
+}
+
+type Options struct {
+	// config from file
+	Cfg Config
+	// data root directory. i.e. $HOME/.config/toh
+	DataRoot string
+	// when using socks5 proxy dns query, if the query dns is consistent with the fake ip
+	// the query request will be processed by the built-in local dns
+	DNSFake string
+	// build-in local dns listen address
+	DNSListen string
+	// build-in local dns used upstream dns
+	DNSUpstream string
+	// how often query results are completely removed from the cache
+	DNSEvict time.Duration
 }
 
 type S5Server struct {
@@ -108,8 +133,8 @@ func NewS5Server(opts Options) (s5Server *S5Server, err error) {
 
 	s5Server.socks5Opts = socks5.Options{
 		Listen:               opts.Cfg.Listen,
-		AdvertiseIP:          opts.AdvertiseIP,
-		AdvertisePort:        opts.AdvertisePort,
+		AdvertiseIP:          opts.Cfg.Advertise.IP,
+		AdvertisePort:        opts.Cfg.Advertise.Port,
 		TCPDialContext:       s5Server.dialTCP,
 		UDPDialContext:       s5Server.dialUDP,
 		TrafficEventConsumer: logTrafficEvent,

@@ -116,8 +116,6 @@ Usage:
   toh s5 [flags]
 
 Flags:
-      --advertise-ip string     advertised server ip (default is listen ip)
-      --advertise-port uint16   advertised server port (default is listen port)
   -c, --config string           config file (default is $HOME/.config/toh/socks5.yml)
       --dns string              local dns upstream (leave blank to disable local dns)
       --dns-evict string        local dns cache evict duration (default "2h")
