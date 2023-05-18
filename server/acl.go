@@ -84,7 +84,7 @@ func (k *key) outBytesLimited() bool {
 }
 
 func NewACL(aclPath, adminKey string) (*ACL, error) {
-	if len(adminKey) < 16 {
+	if len(adminKey) > 0 && len(adminKey) < 16 {
 		return nil, errors.New("the minimum admin key is 16 characters")
 	}
 	acl := &ACL{
