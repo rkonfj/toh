@@ -18,7 +18,7 @@ func init() {
 	Cmd.Flags().String("acl", "acl.json", "file containing access control rules")
 	Cmd.Flags().String("admin", "", "admin key (leave blank to disable admin api)")
 	Cmd.Flags().String("copy-buf", "16Ki", "buffer size for copying network data")
-	Cmd.Flags().StringP("listen", "l", "localhost:9986", "http server listen address")
+	Cmd.Flags().StringP("listen", "l", "127.0.0.1:9986", "http server listen address")
 }
 
 func startAction(cmd *cobra.Command, args []string) error {

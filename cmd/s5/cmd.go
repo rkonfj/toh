@@ -24,7 +24,7 @@ func init() {
 	Cmd.Flags().StringP("config", "c", "", "config file (default is $HOME/.config/toh/socks5.yml)")
 	Cmd.Flags().StringP("listen", "l", "", "socks5+http listen address (specify this to override from config)")
 	Cmd.Flags().String("dns", "", "local dns upstream (leave blank to disable local dns)")
-	Cmd.Flags().String("dns-listen", "localhost:2053", "local dns listen address")
+	Cmd.Flags().String("dns-listen", "127.0.0.1:2053", "local dns listen address")
 	Cmd.Flags().String("dns-evict", "2h", "local dns cache evict duration")
 	Cmd.Flags().String("dns-fake", "", "local fake dns (leave blank to disable fake dns)")
 }
@@ -129,7 +129,7 @@ func processOptions(cmd *cobra.Command) (opts server.Options, err error) {
 func defaultOptions() *server.Config {
 	return &server.Config{
 		Geoip2: "country.mmdb",
-		Listen: "localhost:2080",
+		Listen: "127.0.0.1:2080",
 		Servers: []server.TohServer{{
 			Name:        "us1",
 			Addr:        "https://fill-in-your-server-here.toh.sh/ws",
