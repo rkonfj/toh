@@ -25,49 +25,6 @@ import (
 	"golang.org/x/exp/slices"
 )
 
-type Config struct {
-	// maxmind geoip2 db path
-	Geoip2 string `yaml:"geoip2"`
-	// socks5+http proxy server listen addr
-	Listen string `yaml:"listen"`
-	// advertised server addr
-	Advertise *Advertise `yaml:"advertise,omitempty"`
-	// toh server list
-	Servers []TohServer `yaml:"servers"`
-	// group toh servers
-	Groups []ServerGroup `yaml:"groups,omitempty"`
-}
-
-type Advertise struct {
-	IP   string `yaml:"ip,omitempty"`
-	Port uint16 `yaml:"port,omitempty"`
-}
-
-type TohServer struct {
-	// name to identify the toh server
-	Name string `yaml:"name"`
-	// toh server adderss. i.e. https://fill-in-your-server-here.toh.sh/ws
-	Addr string `yaml:"addr"`
-	// toh server authcate key
-	Key string `yaml:"key"`
-	// this server is used when the remote accessed by the user hits this ruleset
-	Ruleset []string `yaml:"ruleset,omitempty"`
-	// url that responds to any http status code
-	Healthcheck string `yaml:"healthcheck,omitempty"`
-	// the interval send ping to the under websocket conn for keepalive
-	Keepalive string `yaml:"keepalive,omitempty"`
-	// customize the request header sent to the toh server
-	Headers http.Header `yaml:"headers,omitempty"`
-}
-
-type ServerGroup struct {
-	Name string `yaml:"name"`
-	// toh server name list from `servers` section
-	Servers []string `yaml:"servers"`
-	// same as `servers` section
-	Ruleset []string `yaml:"ruleset"`
-}
-
 type Options struct {
 	// config from file
 	Cfg Config

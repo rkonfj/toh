@@ -142,8 +142,8 @@ time="2023-05-12T15:02:14Z" level=info msg="total loaded 1 proxy servers and 0 g
 time="2023-05-12T15:02:14Z" level=info msg="downloading /root/.config/toh/country.mmdb (this can take up to 5m0s)"
 time="2023-05-12T15:05:17Z" level=info msg="listen on localhost:2080 for socks5 now"
 ```
-
-the server `us1` is the test server, will stopped in the future
+> • full configurable options can be viewed [here](https://github.com/rkonfj/toh/blob/main/cmd/s5/server/config.go)  
+> • the server `us1` is the test server, will stopped in the future
 
 **another shell**
 ```sh
