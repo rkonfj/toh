@@ -1,6 +1,9 @@
 ! This rule set lists some websites that are commonly used by students in their daily study
 ! Under 18 years old, need to be accompanied by parents
 
+! Organizations in cooperation with ISO
+.ietf.org
+
 ! Google
 .google.com
 .google.com.sg
