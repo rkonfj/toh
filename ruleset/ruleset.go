@@ -90,6 +90,11 @@ func (rs *Ruleset) PrintStats() {
 	} else if len(rs.ifIPProxyCountrySet) > 0 {
 		ipRules = fmt.Sprintf(", if-ip proxy %s", rs.ifIPProxyCountrySet)
 	}
+	if len(rs.directCountrySet) > 0 {
+		ipRules += fmt.Sprintf(", ip direct %s", rs.directCountrySet)
+	} else if len(rs.proxyCountrySet) > 0 {
+		ipRules += fmt.Sprintf(", ip proxy %s", rs.proxyCountrySet)
+	}
 	logrus.Infof("ruleset %5s: special %d, direct %d, wildcard %d%s",
 		rs.name, len(rs.specialSet), len(rs.directSet), len(rs.wildcardSet), ipRules)
 }
