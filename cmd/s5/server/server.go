@@ -96,6 +96,10 @@ type Group struct {
 	ruleset *ruleset.Ruleset
 }
 
+func (g *Group) selectServer() *Server {
+	return selectServer(g.servers)
+}
+
 func NewS5Server(opts Options) (s5Server *S5Server, err error) {
 	s5Server = &S5Server{
 		opts:          opts,

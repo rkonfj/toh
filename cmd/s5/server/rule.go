@@ -1,7 +1,11 @@
 package server
 
 import (
+	"math/rand"
 	"net"
+
+	"github.com/rkonfj/toh/ruleset"
+	"github.com/sirupsen/logrus"
 )
 
 type selected struct {
@@ -22,118 +26,205 @@ func (p *selected) id() string {
 	return p.server.name
 }
 
-func newSelected(server *Server, group string, err error) *selected {
-	return &selected{
-		server: server,
-		group:  group,
-		err:    err,
-	}
-}
-
-func (s *S5Server) selectProxyServer(host string) (proxy *selected) {
+func (s *S5Server) testDomainOnGroup(host string, group *Group) (proxy selected) {
 	ip := net.ParseIP(host)
-	if ip != nil {
-		// reverse resolution
-		if hosts, ok := s.dnsCache.Hosts(ip.String()); ok {
-			for _, host := range hosts {
-				proxy = newSelected(s.domainMatch(host))
-				proxy.reverseResolutionHost = &host
-				if proxy.server != nil || proxy.err != nil {
-					return
-				}
-			}
-			return
-		}
-
-		// reverse resolution falied and use geoip
-		if s.geoip2db == nil {
-			goto domainMatch
-		}
-
+	if ip != nil && s.geoip2db != nil {
 		c, err := s.geoip2db.Country(ip)
 		if err != nil {
 			proxy.err = err
 			return
 		}
 
-		if len(c.Country.IsoCode) == 0 {
-			goto domainMatch
-		}
-
-		if len(s.groups) > 0 {
-			for _, g := range s.groups {
-				if g.ruleset.CountryMatch(c.Country.IsoCode) {
-					proxy = newSelected(selectServer(g.servers), g.name, nil)
-					return
-				}
-			}
-		}
-
-		for _, s := range s.servers {
-			if s.ruleset.CountryMatch(c.Country.IsoCode) {
-				proxy = newSelected(s, "", nil)
+		if len(c.Country.IsoCode) != 0 {
+			if group.ruleset.IfIPCountryMatch(c.Country.IsoCode) {
+				proxy.group = group.name
+				proxy.server = group.selectServer()
 				return
 			}
 		}
-
 	}
-domainMatch:
-	proxy = newSelected(s.domainMatch(host))
-	return
+	directs := make(map[string]struct{})
+	for _, g := range s.groups {
+		if g.ruleset.DirectMatch(host) {
+			directs[g.name] = struct{}{}
+		}
+	}
+	if _, ok := directs[group.name]; !ok {
+		for _, g := range s.groups {
+			if g.ruleset.SpecialMatch(host) {
+				proxy.group = g.name
+				proxy.server = group.selectServer()
+				return
+			}
+		}
+	}
+	if group.ruleset.WildcardMatch(host) {
+		proxy.group = group.name
+		proxy.server = group.selectServer()
+		return
+	}
+	return selected{}
 }
 
-func (s *S5Server) domainMatch(host string) (server *Server, group string, err error) {
-	// if group match, return
+func (s *S5Server) testIPOnGroup(host string, group *Group) (proxy selected) {
+	ip := net.ParseIP(host)
+	if ip == nil {
+		ips, err := s.dnsCache.LookupIP(host)
+		if len(ips) == 0 {
+			ips, err = group.selectServer().client.LookupIP(host)
+		}
+		if err != nil {
+			proxy.err = err
+			return
+		}
+		ip = ips[rand.Intn(len(ips))]
+	}
+	if s.geoip2db != nil {
+		c, err := s.geoip2db.Country(ip)
+		if err != nil {
+			proxy.err = err
+			return
+		}
+		if group.ruleset.CountryMatch(c.Country.IsoCode) {
+			proxy.group = group.name
+			proxy.server = group.selectServer()
+			return
+		}
+	}
+	return selected{}
+}
+
+func (s *S5Server) testDomainOnServer(host string, server *Server) (proxy selected) {
+	ip := net.ParseIP(host)
+	if ip != nil && s.geoip2db != nil {
+		c, err := s.geoip2db.Country(ip)
+		if err != nil {
+			proxy.err = err
+			return
+		}
+
+		if len(c.Country.IsoCode) != 0 {
+			if server.ruleset.IfIPCountryMatch(c.Country.IsoCode) {
+				proxy.server = server
+				return
+			}
+		}
+	}
+	directs := make(map[string]struct{})
+	for _, g := range s.groups {
+		if g.ruleset.DirectMatch(host) {
+			directs[g.name] = struct{}{}
+		}
+	}
+	if _, ok := directs[server.name]; !ok {
+		for _, se := range s.servers {
+			if se.ruleset.SpecialMatch(host) {
+				proxy.server = server
+				return
+			}
+		}
+	}
+	if server.ruleset.WildcardMatch(host) {
+		proxy.server = server
+		return
+	}
+	return selected{}
+}
+
+func (s *S5Server) testIPOnServer(host string, server *Server) (proxy selected) {
+	ip := net.ParseIP(host)
+	if ip == nil {
+		ips, err := server.client.LookupIP(host)
+		if err != nil {
+			proxy.err = err
+			return
+		}
+		ip = ips[rand.Intn(len(ips))]
+	}
+	if s.geoip2db != nil {
+		c, err := s.geoip2db.Country(ip)
+		if err != nil {
+			proxy.err = err
+			return
+		}
+		if server.ruleset.CountryMatch(c.Country.IsoCode) {
+			proxy.server = server
+			return
+		}
+	}
+	return selected{}
+}
+
+func (s *S5Server) selectProxyServer(host string) (proxy selected) {
+	// reverse resolution
+	if hosts, ok := s.dnsCache.Hosts(host); ok {
+		host = hosts[0]
+		proxy.reverseResolutionHost = &hosts[0]
+	}
+
 	if len(s.groups) > 0 {
-		directGroups := make(map[string]struct{})
-		for _, g := range s.groups {
-			if g.ruleset.DirectMatch(host) {
-				directGroups[g.name] = struct{}{}
-			}
-		}
-		for _, g := range s.groups {
-			if _, ok := directGroups[g.name]; ok {
+		for _, group := range s.groups {
+			logrus.Debugf("group %s using match strategy %d", group.name, group.ruleset.MatchStrategy())
+			switch group.ruleset.MatchStrategy() {
+			case ruleset.IPIfNonDomainMatch:
+				// domainMatch and return
+				proxy = s.testDomainOnGroup(host, group)
+				if proxy.server != nil {
+					return
+				}
+				// ipMatch and return
+				proxy = s.testIPOnGroup(host, group)
+				if proxy.server != nil {
+					return
+				}
+			case ruleset.OnlyDomainMatch:
+				// domainMatch and return
+				proxy = s.testDomainOnGroup(host, group)
+				if proxy.server != nil {
+					return
+				}
+			case ruleset.OnlyIPMatch:
+				// ipMatch and return
+				proxy = s.testIPOnGroup(host, group)
+				if proxy.server != nil {
+					return
+				}
+			default:
 				continue
 			}
-			if g.ruleset.SpecialMatch(host) {
-				return selectServer(g.servers), g.name, nil
-			}
-		}
-
-		for _, g := range s.groups {
-			if _, ok := directGroups[g.name]; ok {
-				continue
-			}
-			if g.ruleset.WildcardMatch(host) {
-				return selectServer(g.servers), g.name, nil
-			}
 		}
 	}
 
-	// else, match server and return
-	directServers := make(map[string]struct{})
-	for _, s := range s.servers {
-		if s.ruleset.DirectMatch(host) {
-			directServers[s.name] = struct{}{}
-		}
-	}
-
-	for _, s := range s.servers {
-		if _, ok := directServers[s.name]; ok {
+	for _, server := range s.servers {
+		logrus.Debugf("server %s using match strategy %d", server.name, server.ruleset.MatchStrategy())
+		switch server.ruleset.MatchStrategy() {
+		case ruleset.IPIfNonDomainMatch:
+			// domainMatch and return
+			proxy = s.testDomainOnServer(host, server)
+			if proxy.server != nil {
+				return
+			}
+			// ipMatch and return
+			proxy = s.testIPOnServer(host, server)
+			if proxy.server != nil {
+				return
+			}
+		case ruleset.OnlyDomainMatch:
+			// domainMatch and return
+			proxy = s.testDomainOnServer(host, server)
+			if proxy.server != nil {
+				return
+			}
+		case ruleset.OnlyIPMatch:
+			// ipMatch and return
+			proxy = s.testIPOnServer(host, server)
+			if proxy.server != nil {
+				return
+			}
+		default:
 			continue
 		}
-		if s.ruleset.SpecialMatch(host) {
-			return s, "", nil
-		}
 	}
-
-	for _, s := range s.servers {
-		if _, ok := directServers[s.name]; ok {
-			continue
-		}
-		if s.ruleset.WildcardMatch(host) {
-			return s, "", nil
-		}
-	}
+	proxy.server = nil
 	return
 }

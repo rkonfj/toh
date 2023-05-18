@@ -37,6 +37,34 @@ func (c *dnsCache) Hosts(ip string) ([]string, bool) {
 	return nil, false
 }
 
+func (c *dnsCache) LookupIP(host string) (ips []net.IP, err error) {
+	q4 := dns.Question{Name: dns.Fqdn(host), Qtype: dns.TypeA, Qclass: dns.ClassINET}
+	q6 := dns.Question{Name: dns.Fqdn(host), Qtype: dns.TypeAAAA, Qclass: dns.ClassINET}
+	var wg sync.WaitGroup
+	wg.Add(1)
+	var ip6 []net.IP
+	go func() {
+		defer wg.Done()
+		if entry, ok := c.Get(q6.String()); ok {
+			for _, a := range entry.response.Answer {
+				if a.Header().Rrtype == dns.TypeAAAA {
+					ip6 = append(ip6, a.(*dns.AAAA).AAAA)
+				}
+			}
+		}
+	}()
+	if entry, ok := c.Get(q4.String()); ok {
+		for _, a := range entry.response.Answer {
+			if a.Header().Rrtype == dns.TypeA {
+				ips = append(ips, a.(*dns.A).A)
+			}
+		}
+	}
+	wg.Wait()
+	ips = append(ips, ip6...)
+	return
+}
+
 func (c *dnsCache) Get(key string) (*cacheEntry, bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
