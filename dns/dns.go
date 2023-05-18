@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/miekg/dns"
+	"github.com/rkonfj/toh/spec"
 	"github.com/sirupsen/logrus"
 )
 
@@ -198,6 +199,10 @@ func (s *DomainNameServer) LookupIP(host string,
 				ips = append(ips, a.(*dns.AAAA).AAAA)
 			}
 		}
+	}
+	if len(ips) == 0 {
+		err = spec.ErrDNSRecordNotFound
+		return
 	}
 	logrus.Debugf("dns lookup %s: %s", host, ips)
 	return
