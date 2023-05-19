@@ -236,6 +236,13 @@ func (s *S5Server) registerHTTPHandlers() {
 
 func (s *S5Server) dial(ctx context.Context, addr, network string) (
 	dialerName string, conn net.Conn, err error) {
+	// dial localdns instead of fake dns
+	if len(s.opts.DNSUpstream) > 0 && strings.Contains(addr, s.opts.DNSFake) {
+		dialerName = "direct"
+		conn, err = s.defaultDialer.Dial(network, s.opts.DNSListen)
+		return
+	}
+
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
 		return
@@ -246,25 +253,19 @@ func (s *S5Server) dial(ctx context.Context, addr, network string) (
 		return
 	}
 
-	log := logrus.WithField(spec.AppAddr.String(), ctx.Value(spec.AppAddr))
+	log := logrus.WithField(spec.AppAddr.String(), ctx.Value(spec.AppAddr)).WithField("net", network)
 	if proxy.ok() {
 		dialerName = proxy.server.name
 		access := addr
 		if proxy.reverseResolutionHost != nil {
 			access = fmt.Sprintf("%s:%s", *proxy.reverseResolutionHost, port)
 		}
-		log.Infof("%s://%s using %s latency %s", network, access, proxy.id(), proxy.server.latency)
-		if network == "tcp" {
-			conn, err = proxy.server.client.DialTCP(ctx, addr)
-		} else if network == "udp" {
-			conn, err = proxy.server.client.DialUDP(ctx, addr)
-		} else {
-			err = errors.New("unsupported network " + network)
-		}
+		log.Infof("%s using %s latency %s", access, proxy.id(), proxy.server.latency)
+		conn, err = proxy.server.client.DialContext(ctx, network, addr)
 		return
 	}
 
-	log.Infof("%s://%s using direct", network, addr)
+	log.Infof("%s using direct", addr)
 	dialerName = "direct"
 	conn, err = s.defaultDialer.DialContext(ctx, network, addr)
 	return
@@ -277,11 +278,6 @@ func (s *S5Server) dialTCP(ctx context.Context, addr string) (
 
 func (s *S5Server) dialUDP(ctx context.Context, addr string) (
 	dialerName string, conn net.Conn, err error) {
-	if len(s.opts.DNSUpstream) > 0 && strings.Contains(addr, s.opts.DNSFake) {
-		dialerName = "direct"
-		conn, err = s.defaultDialer.Dial("udp", s.opts.DNSListen)
-		return
-	}
 	return s.dial(ctx, addr, "udp")
 }
 
