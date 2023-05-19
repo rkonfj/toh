@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"sync"
@@ -115,7 +116,7 @@ func NewACL(aclPath, adminKey string) (*ACL, error) {
 		defer aclF.Close()
 		err = json.NewDecoder(aclF).Decode(&sto)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("acl file: %s", err)
 		}
 	}
 
