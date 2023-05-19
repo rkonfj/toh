@@ -8,9 +8,11 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/miekg/dns"
@@ -141,6 +143,7 @@ func (s *S5Server) Run() error {
 
 	go s.openGeoip2()
 	go s.dns.Run()
+	go s.watchSignal()
 	return ss.Run()
 }
 
@@ -217,14 +220,10 @@ func (s *S5Server) loadGroups() (err error) {
 
 func (s *S5Server) printRulesetStats() {
 	for _, s := range s.servers {
-		if s.ruleset != nil {
-			s.ruleset.PrintStats()
-		}
+		s.ruleset.PrintStats()
 	}
 	for _, g := range s.groups {
-		if g.ruleset != nil {
-			g.ruleset.PrintStats()
-		}
+		g.ruleset.PrintStats()
 	}
 }
 
@@ -321,6 +320,36 @@ func (s *S5Server) openGeoip2() {
 		return
 	}
 	s.geoip2db = db
+}
+
+func (s *S5Server) watchSignal() {
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGHUP)
+	for {
+		sig := <-sigs
+		switch sig {
+		case syscall.SIGHUP:
+			s.reloadRuleset()
+		default:
+		}
+	}
+}
+
+func (s *S5Server) reloadRuleset() {
+	for _, g := range s.groups {
+		err := g.ruleset.Reload()
+		if err != nil {
+			logrus.Error(err)
+		}
+	}
+	for _, s := range s.servers {
+		err := s.ruleset.Reload()
+		if err != nil {
+			logrus.Error(err)
+		}
+	}
+	ruleset.ResetCache()
+	s.printRulesetStats()
 }
 
 func selectServer(servers []*Server) *Server {

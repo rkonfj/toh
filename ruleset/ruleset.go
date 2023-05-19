@@ -27,8 +27,11 @@ var (
 )
 
 type Ruleset struct {
-	dial                 func(ctx context.Context, network, addr string) (net.Conn, error)
-	name                 string
+	dial             func(ctx context.Context, network, addr string) (net.Conn, error)
+	name             string
+	rawRuleset       []string
+	ruleFileDataRoot string
+
 	ifIPDirectCountrySet []string
 	ifIPProxyCountrySet  []string
 	directCountrySet     []string
@@ -40,8 +43,32 @@ type Ruleset struct {
 
 func Parse(name, dataRoot string, ruleset []string,
 	dial func(ctx context.Context, network, addr string) (net.Conn, error)) (rs *Ruleset, err error) {
-	rs = &Ruleset{name: name, dial: dial}
-	for _, ruleLocation := range ruleset {
+	rs = &Ruleset{name: name, dial: dial, rawRuleset: ruleset, ruleFileDataRoot: dataRoot}
+	err = rs.Reload()
+	return
+}
+
+func ResetCache() {
+	cache = nil
+	cache = make(map[string][]byte)
+}
+
+func (rs *Ruleset) Reload() (err error) {
+	if rs == nil {
+		return
+	}
+	if len(rs.rawRuleset) == 0 {
+		return
+	}
+	rs.ifIPDirectCountrySet = rs.ifIPDirectCountrySet[:0]
+	rs.ifIPProxyCountrySet = rs.ifIPProxyCountrySet[:0]
+	rs.directCountrySet = rs.directCountrySet[:0]
+	rs.proxyCountrySet = rs.proxyCountrySet[:0]
+	rs.directSet = rs.directSet[:0]
+	rs.specialSet = rs.specialSet[:0]
+	rs.wildcardSet = rs.wildcardSet[:0]
+
+	for _, ruleLocation := range rs.rawRuleset {
 		var reader io.Reader
 		var readCloser io.ReadCloser
 		if r, ok := strings.CutPrefix(ruleLocation, "b64,"); ok {
@@ -50,7 +77,7 @@ func Parse(name, dataRoot string, ruleset []string,
 			} else if strings.HasPrefix(r, "rule:") {
 				readCloser = io.NopCloser(strings.NewReader(r[5:] + "\n"))
 			} else {
-				readCloser, err = rs.openFile(ensureAbsPath(dataRoot, r))
+				readCloser, err = rs.openFile(ensureAbsPath(rs.ruleFileDataRoot, r))
 			}
 			if err != nil {
 				return
@@ -62,7 +89,7 @@ func Parse(name, dataRoot string, ruleset []string,
 			} else if strings.HasPrefix(r, "rule:") {
 				readCloser = io.NopCloser(strings.NewReader(r[5:] + "\n"))
 			} else {
-				readCloser, err = rs.openFile(ensureAbsPath(dataRoot, r))
+				readCloser, err = rs.openFile(ensureAbsPath(rs.ruleFileDataRoot, r))
 			}
 			if err != nil {
 				return
@@ -79,11 +106,10 @@ func Parse(name, dataRoot string, ruleset []string,
 	return
 }
 
-func ResetCache() {
-	cache = nil
-}
-
 func (rs *Ruleset) PrintStats() {
+	if rs == nil {
+		return
+	}
 	ipRules := ""
 	if len(rs.ifIPDirectCountrySet) > 0 {
 		ipRules = fmt.Sprintf(", if-ip direct %s", rs.ifIPDirectCountrySet)
