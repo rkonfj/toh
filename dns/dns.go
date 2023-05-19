@@ -15,6 +15,10 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+var (
+	ErrLocalDNSDisabled = errors.New("local dns is disabled")
+)
+
 type Options struct {
 	Listen   string
 	Upstream string
@@ -22,15 +26,16 @@ type Options struct {
 	Exchange func(upstream string, clientAddr string, query *dns.Msg) (resp *dns.Msg, err error)
 }
 
-type DomainNameServer struct {
+type LocalDNS struct {
 	client      *dns.Client
 	cache       *dnsCache
 	cacheTicker *time.Ticker
 	opts        Options
+	enabled     bool
 }
 
-func NewDNS(opts Options) *DomainNameServer {
-	return &DomainNameServer{
+func NewLocalDNS(opts Options) *LocalDNS {
+	return &LocalDNS{
 		client: &dns.Client{},
 		cache: &dnsCache{
 			cache:     make(map[string]*cacheEntry),
@@ -93,7 +98,7 @@ func (c *dnsCache) set(key string, entry *cacheEntry) {
 	}
 }
 
-func (c *DomainNameServer) dnsCacheEvictLoop() {
+func (c *LocalDNS) dnsCacheEvictLoop() {
 	for range c.cacheTicker.C {
 		expiredKeys := []string{}
 		c.cache.lock.Lock()
@@ -118,7 +123,7 @@ func (c *DomainNameServer) dnsCacheEvictLoop() {
 	}
 }
 
-func (s *DomainNameServer) Run() {
+func (s *LocalDNS) Run() {
 	if len(s.opts.Upstream) == 0 {
 		return
 	}
@@ -144,11 +149,16 @@ func (s *DomainNameServer) Run() {
 		logrus.Error(tcpServer.ListenAndServe())
 	}()
 	go s.dnsCacheEvictLoop()
+	s.enabled = true
 	wg.Wait()
 }
 
-func (s *DomainNameServer) LookupIP(host string,
+func (s *LocalDNS) LookupIP(host string,
 	exchange func(dnServer string, query *dns.Msg) (resp *dns.Msg, err error)) (ips []net.IP, err error) {
+	if !s.enabled {
+		err = ErrLocalDNSDisabled
+		return
+	}
 	r4 := &dns.Msg{}
 	r4.SetQuestion(dns.Fqdn(host), dns.TypeA)
 	r6 := &dns.Msg{}
@@ -208,7 +218,11 @@ func (s *DomainNameServer) LookupIP(host string,
 	return
 }
 
-func (s *DomainNameServer) ReverseLookup(ip string) (hosts []string, err error) {
+func (s *LocalDNS) ReverseLookup(ip string) (hosts []string, err error) {
+	if !s.enabled {
+		err = ErrLocalDNSDisabled
+		return
+	}
 	hosts, ok := s.cache.hosts(ip)
 	if !ok {
 		err = errors.New("unresolved")
@@ -216,7 +230,7 @@ func (s *DomainNameServer) ReverseLookup(ip string) (hosts []string, err error) 
 	return
 }
 
-func (s *DomainNameServer) dnsQuery(w dns.ResponseWriter, r *dns.Msg) {
+func (s *LocalDNS) dnsQuery(w dns.ResponseWriter, r *dns.Msg) {
 	if len(r.Question) == 0 {
 		return
 	}
@@ -240,7 +254,7 @@ func (s *DomainNameServer) dnsQuery(w dns.ResponseWriter, r *dns.Msg) {
 	}
 }
 
-func (s *DomainNameServer) updateCache(r *dns.Msg, clientAddr string) *cacheEntry {
+func (s *LocalDNS) updateCache(r *dns.Msg, clientAddr string) *cacheEntry {
 	resp, err := s.opts.Exchange(s.opts.Upstream, clientAddr, r)
 	if err != nil {
 		logrus.Error(err)
@@ -260,7 +274,7 @@ func (s *DomainNameServer) updateCache(r *dns.Msg, clientAddr string) *cacheEntr
 	return s.cacheResponse(r, resp)
 }
 
-func (s *DomainNameServer) cacheResponse(req, resp *dns.Msg) *cacheEntry {
+func (s *LocalDNS) cacheResponse(req, resp *dns.Msg) *cacheEntry {
 	maxTTL := 0
 	for _, ans := range resp.Answer {
 		if int(ans.Header().Ttl) > maxTTL {

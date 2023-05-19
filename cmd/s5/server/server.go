@@ -50,7 +50,7 @@ type S5Server struct {
 	groups        []*Group
 	defaultDialer net.Dialer
 	geoip2db      *geoip2.Reader
-	dns           *D.DomainNameServer
+	dns           *D.LocalDNS
 }
 
 type Server struct {
@@ -107,7 +107,7 @@ func NewS5Server(opts Options) (s5Server *S5Server, err error) {
 		s5Server.socks5Opts.Listen = opts.Listen
 	}
 
-	s5Server.dns = D.NewDNS(D.Options{
+	s5Server.dns = D.NewLocalDNS(D.Options{
 		Listen:   opts.DNSListen,
 		Upstream: opts.DNSUpstream,
 		Evict:    opts.DNSEvict,

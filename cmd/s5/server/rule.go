@@ -66,31 +66,6 @@ func (s *S5Server) testDomainOnGroup(host string, group *Group) (proxy selected)
 	return selected{}
 }
 
-func (s *S5Server) testIPOnGroup(host string, group *Group) (proxy selected) {
-	ip := net.ParseIP(host)
-	if ip == nil {
-		ips, err := s.dns.LookupIP(host, group.selectServer().client.DNSExchange)
-		if err != nil {
-			proxy.err = err
-			return
-		}
-		ip = ips[rand.Intn(len(ips))]
-	}
-	if s.geoip2db != nil {
-		c, err := s.geoip2db.Country(ip)
-		if err != nil {
-			proxy.err = err
-			return
-		}
-		if group.ruleset.CountryMatch(c.Country.IsoCode) {
-			proxy.group = group.name
-			proxy.server = group.selectServer()
-			return
-		}
-	}
-	return selected{}
-}
-
 func (s *S5Server) testDomainOnServer(host string, server *Server) (proxy selected) {
 	ip := net.ParseIP(host)
 	if ip != nil && s.geoip2db != nil {
@@ -128,12 +103,12 @@ func (s *S5Server) testDomainOnServer(host string, server *Server) (proxy select
 	return selected{}
 }
 
-func (s *S5Server) testIPOnServer(host string, server *Server) (proxy selected) {
+func (s *S5Server) testIP(host string, rs *ruleset.Ruleset, server *Server) (proxy selected) {
 	ip := net.ParseIP(host)
 	if ip == nil {
 		ips, err := s.dns.LookupIP(host, server.client.DNSExchange)
 		if err != nil {
-			proxy.err = err
+			logrus.Warnf("[rule:ip] %s lookupip error: %s. using direct", host, err.Error())
 			return
 		}
 		ip = ips[rand.Intn(len(ips))]
@@ -141,15 +116,15 @@ func (s *S5Server) testIPOnServer(host string, server *Server) (proxy selected) 
 	if s.geoip2db != nil {
 		c, err := s.geoip2db.Country(ip)
 		if err != nil {
-			proxy.err = err
+			logrus.Warnf("[rule:ip] %s geoip2 lookupcountry error: %s. using direct", ip, err.Error())
 			return
 		}
-		if server.ruleset.CountryMatch(c.Country.IsoCode) {
+		if rs.CountryMatch(c.Country.IsoCode) {
 			proxy.server = server
 			return
 		}
 	}
-	return selected{}
+	return
 }
 
 func (s *S5Server) selectProxyServer(host string) (proxy selected) {
@@ -170,7 +145,7 @@ func (s *S5Server) selectProxyServer(host string) (proxy selected) {
 					return
 				}
 				// ipMatch and return
-				proxy = s.testIPOnGroup(host, group)
+				proxy = s.testIP(host, group.ruleset, group.selectServer())
 				if proxy.server != nil {
 					return
 				}
@@ -182,7 +157,7 @@ func (s *S5Server) selectProxyServer(host string) (proxy selected) {
 				}
 			case ruleset.OnlyIPMatch:
 				// ipMatch and return
-				proxy = s.testIPOnGroup(host, group)
+				proxy = s.testIP(host, group.ruleset, group.selectServer())
 				if proxy.server != nil {
 					return
 				}
@@ -202,7 +177,7 @@ func (s *S5Server) selectProxyServer(host string) (proxy selected) {
 				return
 			}
 			// ipMatch and return
-			proxy = s.testIPOnServer(host, server)
+			proxy = s.testIP(host, server.ruleset, server)
 			if proxy.server != nil {
 				return
 			}
@@ -214,7 +189,7 @@ func (s *S5Server) selectProxyServer(host string) (proxy selected) {
 			}
 		case ruleset.OnlyIPMatch:
 			// ipMatch and return
-			proxy = s.testIPOnServer(host, server)
+			proxy = s.testIP(host, server.ruleset, server)
 			if proxy.server != nil {
 				return
 			}
