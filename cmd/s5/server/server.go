@@ -237,7 +237,7 @@ func (s *S5Server) registerHTTPHandlers() {
 func (s *S5Server) dial(ctx context.Context, addr, network string) (
 	dialerName string, conn net.Conn, err error) {
 	// dial localdns instead of fake dns
-	if len(s.opts.DNSUpstream) > 0 && strings.Contains(addr, s.opts.DNSFake) {
+	if len(s.opts.DNSFake) > 0 && len(s.opts.DNSUpstream) > 0 && strings.Contains(addr, s.opts.DNSFake) {
 		dialerName = "direct"
 		conn, err = s.defaultDialer.Dial(network, s.opts.DNSListen)
 		return
