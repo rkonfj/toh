@@ -287,18 +287,18 @@ func (s *S5Server) dnsExchange(dnServer string, clientAddr string, r *dns.Msg) (
 		err = proxy.err
 		return
 	}
-	log := logrus.WithField(spec.AppAddr.String(), clientAddr)
+	log := logrus.WithField(spec.AppAddr.String(), clientAddr).WithField("net", "dns")
 	if proxy.ok() {
 		resp, proxy.err = proxy.server.client.DNSExchange(dnServer, r)
 		if proxy.err != nil {
 			err = proxy.err
 			return
 		}
-		log.Infof("dns query %s type %s using %s latency %s",
+		log.Infof("%s%s using %s latency %s",
 			r.Question[0].Name, dns.Type(r.Question[0].Qtype).String(), proxy.id(), proxy.server.latency)
 		return
 	}
-	log.Infof("dns query %s type %s using direct", r.Question[0].Name, dns.Type(r.Question[0].Qtype).String())
+	log.Infof("%s%s using direct", r.Question[0].Name, dns.Type(r.Question[0].Qtype).String())
 	return
 }
 
