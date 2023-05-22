@@ -20,10 +20,14 @@
 
 ! OpenAI
 .openai.com
+.agpt.co
 
 ! GitHub
 .github.com
 .githubusercontent.com
+
+! Go
+.go.dev
 
 ! StackOverflow
 .stackoverflow.com
@@ -48,8 +52,15 @@
 .docker.com
 .k8s.io
 
+! The New York Times
+.nytimes.com
+.nyt.com
+
 ! MISC
 .termux.com
 .medium.com
 .imgur.com
 .v2ex.com
+.cloudflare.com
+.netflix.com
+.grafana.com
