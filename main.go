@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/rkonfj/toh/cmd/acl"
 	"github.com/rkonfj/toh/cmd/pf"
 	"github.com/rkonfj/toh/cmd/s5"
 	"github.com/rkonfj/toh/cmd/serve"
@@ -23,6 +24,7 @@ func main() {
 	cmd.AddCommand(pf.Cmd)
 	cmd.AddCommand(serve.Cmd)
 	cmd.AddCommand(s5.Cmd)
+	cmd.AddCommand(acl.Cmd)
 
 	cmd.PersistentFlags().String("log-level", "info", "logrus logger level")
 

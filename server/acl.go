@@ -40,16 +40,8 @@ type ACLStorage struct {
 type Key struct {
 	Name       string          `json:"name,omitempty"`
 	Key        string          `json:"key"`
-	Limit      *Limit          `json:"limit,omitempty"`
+	Limit      *api.Limit      `json:"limit,omitempty"`
 	BytesUsage *api.BytesUsage `json:"bytesUsage,omitempty"`
-}
-
-type Limit struct {
-	Bytes     string   `json:"bytes,omitempty"`
-	InBytes   string   `json:"inBytes,omitempty"`
-	OutBytes  string   `json:"outBytes,omitempty"`
-	Whitelist []string `json:"whitelist,omitempty"`
-	Blacklist []string `json:"blacklist,omitempty"`
 }
 
 type key struct {
@@ -226,7 +218,7 @@ func (a *ACL) DelKey(key string) {
 }
 
 // Limit replace key's limit
-func (a *ACL) Limit(key string, l *Limit) error {
+func (a *ACL) Limit(key string, l *api.Limit) error {
 	a.stoUpdatePendingCountLock.Lock()
 	defer a.stoUpdatePendingCountLock.Unlock()
 	a.stoUpdatePendingCount++
@@ -244,7 +236,35 @@ func (a *ACL) Limit(key string, l *Limit) error {
 	return nil
 }
 
-func (a *ACL) applyACLKeyLimit(ke *key, l *Limit) error {
+func (a *ACL) GetLimit(key string) *api.Limit {
+	for _, ke := range a.sto.Keys {
+		if ke.Key == key {
+			if ke.Limit == nil {
+				return &api.Limit{}
+			}
+			return ke.Limit
+		}
+	}
+	return &api.Limit{}
+}
+
+func (a *ACL) GetUsage(key string) *api.BytesUsage {
+	if k, ok := a.keys[key]; ok {
+		return k.bytesUsage
+	}
+	return &api.BytesUsage{}
+}
+
+func (a *ACL) DelUsage(key string) {
+	a.stoUpdatePendingCountLock.Lock()
+	defer a.stoUpdatePendingCountLock.Unlock()
+	a.stoUpdatePendingCount++
+	if k, ok := a.keys[key]; ok {
+		k.bytesUsage = &api.BytesUsage{}
+	}
+}
+
+func (a *ACL) applyACLKeyLimit(ke *key, l *api.Limit) error {
 	if l != nil {
 		if l.Bytes != "" {
 			b, err := humanize.ParseBytes(l.Bytes)

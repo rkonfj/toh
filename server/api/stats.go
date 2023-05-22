@@ -13,6 +13,14 @@ type BytesUsage struct {
 	Out uint64 `json:"out"`
 }
 
+type Limit struct {
+	Bytes     string   `json:"bytes,omitempty"`
+	InBytes   string   `json:"inBytes,omitempty"`
+	OutBytes  string   `json:"outBytes,omitempty"`
+	Whitelist []string `json:"whitelist,omitempty"`
+	Blacklist []string `json:"blacklist,omitempty"`
+}
+
 type AdminStats struct {
 	ConnCount int64 `json:"connCount"`
 }
