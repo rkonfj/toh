@@ -17,23 +17,21 @@ type TrafficEvent struct {
 
 type TrafficEventConsumer func(e *TrafficEvent)
 
-func (s *TohServer) startTrafficEventConsumeDaemon() {
-	go func() {
-		for e := range s.trafficEventChan {
-			if e.In == 0 && e.Out == 0 {
-				continue
-			}
-			logrus.
-				WithField("stats_in_bytes", e.In).
-				WithField("stats_out_bytes", e.Out).
-				WithField("stats_key", e.Key).
-				WithField("stats_net", e.Network).
-				WithField("stats_in", e.ClientIP).
-				WithField("stats_out", e.RemoteAddr).
-				Info()
-			s.acl.UpdateBytesUsage(e.Key, uint64(e.In), uint64(e.Out))
+func (s *TohServer) runTrafficEventConsumeLoop() {
+	for e := range s.trafficEventChan {
+		if e.In == 0 && e.Out == 0 {
+			continue
 		}
-	}()
+		logrus.
+			WithField("stats_in_bytes", e.In).
+			WithField("stats_out_bytes", e.Out).
+			WithField("stats_key", e.Key).
+			WithField("stats_net", e.Network).
+			WithField("stats_in", e.ClientIP).
+			WithField("stats_out", e.RemoteAddr).
+			Info()
+		s.acl.UpdateBytesUsage(e.Key, uint64(e.In), uint64(e.Out))
+	}
 }
 
 func (s TohServer) HandleShowStats(w http.ResponseWriter, r *http.Request) {

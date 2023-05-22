@@ -6,7 +6,10 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 
 	"github.com/rkonfj/toh/spec"
 	"github.com/sirupsen/logrus"
@@ -44,7 +47,8 @@ func NewTohServer(options Options) (*TohServer, error) {
 }
 
 func (s *TohServer) Run() {
-	s.startTrafficEventConsumeDaemon()
+	go s.runTrafficEventConsumeLoop()
+	go s.runShutdownListener()
 	s.registerAdminAPIIfEnabled()
 
 	http.HandleFunc("/stats", s.HandleShowStats)
@@ -115,4 +119,13 @@ func (s *TohServer) pipe(wsConn *websocket.Conn, netConn net.Conn) (lbc, rbc int
 	wsConn.Close(websocket.StatusBadGateway, "remote close")
 	wg.Wait()
 	return
+}
+
+func (s *TohServer) runShutdownListener() {
+	sigs := make(chan os.Signal, 1)
+	defer close(sigs)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	<-sigs
+	s.acl.Shutdown()
+	os.Exit(0)
 }

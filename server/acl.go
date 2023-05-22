@@ -281,6 +281,10 @@ func (a *ACL) DelUsage(key string) {
 	}
 }
 
+func (a *ACL) Shutdown() {
+	os.Remove(filepath.Join(os.TempDir(), "toh-admin-key"))
+}
+
 func (a *ACL) applyACLKeyLimit(ke *key, l *api.Limit) error {
 	if l != nil {
 		if l.Bytes != "" {
