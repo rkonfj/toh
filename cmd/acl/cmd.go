@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/rkonfj/toh/server/api"
 	"github.com/spf13/cobra"
@@ -18,14 +20,14 @@ var (
 func init() {
 	Cmd = &cobra.Command{
 		Use:               "acl",
-		Short:             "ToH server acl admin tool",
+		Short:             "ToH server admin tool for acl",
 		Args:              cobra.NoArgs,
 		PersistentPreRunE: initAction,
 	}
 
 	cmdNew := &cobra.Command{
 		Use:   "new",
-		Short: "new acl key",
+		Short: "create an acl key",
 		Args:  cobra.NoArgs,
 		RunE:  aclNew,
 	}
@@ -33,7 +35,7 @@ func init() {
 
 	cmdDel := &cobra.Command{
 		Use:   "del",
-		Short: "del acl key",
+		Short: "delete the acl key",
 		Args:  cobra.NoArgs,
 		RunE:  aclDel,
 	}
@@ -42,7 +44,7 @@ func init() {
 
 	cmdLimit := &cobra.Command{
 		Use:   "limit",
-		Short: "limit acl key",
+		Short: "limit the acl key or get it's limit",
 		Args:  cobra.NoArgs,
 		RunE:  aclLimit,
 	}
@@ -57,7 +59,7 @@ func init() {
 
 	cmdUsage := &cobra.Command{
 		Use:   "usage",
-		Short: "acl key usage",
+		Short: "reset the acl key usage or get it",
 		Args:  cobra.NoArgs,
 		RunE:  aclUsage,
 	}
@@ -66,7 +68,7 @@ func init() {
 	cmdUsage.MarkFlagRequired("key")
 
 	Cmd.PersistentFlags().StringP("server", "s", "http://127.0.0.1:9986", "toh server")
-	Cmd.PersistentFlags().StringP("admin-key", "k", "", "toh server admin-key")
+	Cmd.PersistentFlags().StringP("admin-key", "k", "", "toh server admin key (default read from admin-key file)")
 	Cmd.AddCommand(cmdNew)
 	Cmd.AddCommand(cmdDel)
 	Cmd.AddCommand(cmdLimit)
@@ -74,19 +76,24 @@ func init() {
 }
 
 func initAction(cmd *cobra.Command, args []string) (err error) {
-	server := os.Getenv("TOH_SERVER")
-	if len(server) == 0 {
-		server, err = cmd.Flags().GetString("server")
-		if err != nil {
-			return err
-		}
+	server, err := cmd.Flags().GetString("server")
+	if err != nil {
+		return err
 	}
 
-	adminKey := os.Getenv("TOH_ADMIN_KEY")
+	adminKey, err := cmd.Flags().GetString("admin-key")
+	if err != nil {
+		return err
+	}
 	if len(adminKey) == 0 {
-		adminKey, err = cmd.Flags().GetString("admin-key")
-		if err != nil {
-			return err
+		adminKeyFile, err := os.Open(filepath.Join(os.TempDir(), "toh-admin-key"))
+		if err == nil {
+			defer adminKeyFile.Close()
+			b, err := io.ReadAll(adminKeyFile)
+			if err != nil {
+				return err
+			}
+			adminKey = string(b)
 		}
 	}
 
@@ -123,6 +130,7 @@ func aclDel(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	fmt.Println("ok")
 	return nil
 }
 

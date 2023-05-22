@@ -10,7 +10,7 @@ import (
 )
 
 func (s *TohServer) registerAdminAPIIfEnabled() {
-	if s.options.Admin == "" {
+	if s.options.AdminKey == "" {
 		return
 	}
 	http.HandleFunc("/admin/acl/key", s.HandleAdminKey)

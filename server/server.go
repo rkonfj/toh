@@ -21,14 +21,14 @@ type TohServer struct {
 }
 
 type Options struct {
-	Listen string
-	ACL    string
-	Buf    uint64
-	Admin  string
+	Listen   string
+	ACL      string
+	Buf      uint64
+	AdminKey string
 }
 
 func NewTohServer(options Options) (*TohServer, error) {
-	acl, err := NewACL(options.ACL, options.Admin)
+	acl, err := NewACL(options.ACL, options.AdminKey)
 	if err != nil {
 		return nil, err
 	}

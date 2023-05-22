@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -80,6 +81,16 @@ func NewACL(aclPath, adminKey string) (*ACL, error) {
 	if len(adminKey) > 0 && len(adminKey) < 16 {
 		return nil, errors.New("the minimum admin key is 16 characters")
 	}
+
+	if len(adminKey) > 0 {
+		adminKeyFile, err := os.Create(filepath.Join(os.TempDir(), "toh-admin-key"))
+		if err != nil {
+			return nil, err
+		}
+		defer adminKeyFile.Close()
+		adminKeyFile.Write([]byte(adminKey))
+	}
+
 	acl := &ACL{
 		keys:        make(map[string]*key),
 		stoFilePath: aclPath,
@@ -133,6 +144,9 @@ func (a *ACL) IsAdminAccess(key string) bool {
 }
 
 func (a *ACL) CheckKey(key string) error {
+	if a.IsAdminAccess(key) {
+		return nil
+	}
 	if k, ok := a.keys[key]; ok {
 		if k.inBytesLimited() {
 			return ErrInDataLimited
@@ -146,6 +160,9 @@ func (a *ACL) CheckKey(key string) error {
 }
 
 func (a *ACL) Check(key, network, addr string) error {
+	if a.IsAdminAccess(key) {
+		return nil
+	}
 	err := a.CheckKey(key)
 	if err != nil {
 		return err
