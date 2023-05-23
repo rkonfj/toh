@@ -23,9 +23,10 @@ image:
 dockerhub: image
 	docker push rkonfj/toh:${version}
 github: clean all
+	gzip toh-${version}*
 	git tag -d ${version} 2>/dev/null || true
 	gh release delete ${version} -y --cleanup-tag 2>/dev/null || true
-	gh release create ${version} --generate-notes --title "toh ${version}" toh-*
+	gh release create ${version} --generate-notes --title "toh ${version}" toh-${version}*.gz
 dist: github dockerhub
 clean:
 	rm toh* 2>/dev/null || true
