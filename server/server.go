@@ -73,18 +73,20 @@ func (s TohServer) HandleUpgradeWebSocket(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{})
-	if err != nil {
-		logrus.Errorf("%v", err)
-		return
-	}
 	dialer := net.Dialer{}
 	netConn, err := dialer.DialContext(context.Background(), network, addr)
 	if err != nil {
-		conn.Close(websocket.StatusBadGateway, "remote error")
 		logrus.Infof("%s -> %s://%s dial error %v", clientIP, network, addr, err)
 		return
 	}
+	w.Header().Add(spec.HeaderEstablishAddr, netConn.RemoteAddr().String())
+
+	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{})
+	if err != nil {
+		logrus.Error(err)
+		return
+	}
+
 	go func() {
 		lbc, rbc := s.pipe(conn, netConn)
 		s.trafficEventChan <- &TrafficEvent{

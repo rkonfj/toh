@@ -33,6 +33,7 @@ var (
 	HeaderHandshakeKey  = "X-Toh-Key"
 	HeaderHandshakeNet  = "X-Toh-Net"
 	HeaderHandshakeAddr = "X-Toh-Addr"
+	HeaderEstablishAddr = "X-Toh-EstAddr"
 )
 
 // Dial describe the dial func

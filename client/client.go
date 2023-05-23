@@ -24,6 +24,8 @@ import (
 type TohClient struct {
 	options    Options
 	httpClient *http.Client
+	serverIPs  []net.IP
+	serverPort string
 	dnsClient  *dns.Client
 }
 
@@ -44,20 +46,23 @@ func NewTohClient(options Options) (*TohClient, error) {
 	c.httpClient = &http.Client{
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, network, addr string) (conn net.Conn, err error) {
-				host, port, err := net.SplitHostPort(addr)
-				if err != nil {
-					return
-				}
-
-				ips, err := c.directLookupIP(host, dns.TypeA)
-				if err == spec.ErrDNSTypeANotFound {
-					ips, err = c.directLookupIP(host, dns.TypeAAAA)
-				}
-				if err != nil {
-					return
+				if len(c.serverIPs) == 0 {
+					var host string
+					host, c.serverPort, err = net.SplitHostPort(addr)
+					if err != nil {
+						return
+					}
+					c.serverIPs, err = c.directLookupIP(host, dns.TypeA)
+					if err == spec.ErrDNSTypeANotFound {
+						c.serverIPs, err = c.directLookupIP(host, dns.TypeAAAA)
+					}
+					if err != nil {
+						err = spec.ErrDNSRecordNotFound
+						return
+					}
 				}
 				return (&net.Dialer{}).DialContext(ctx, network,
-					net.JoinHostPort(ips[rand.Intn(len(ips))].String(), port))
+					net.JoinHostPort(c.serverIPs[rand.Intn(len(c.serverIPs))].String(), c.serverPort))
 			},
 		},
 	}
@@ -207,40 +212,6 @@ func (c *TohClient) directLookupIP(host string, t uint16) (ips []net.IP, err err
 
 func (c *TohClient) dial(ctx context.Context, network, addr string) (
 	wsConn *nhooyrWSConn, remoteAddr net.Addr, err error) {
-	host, port, err := net.SplitHostPort(addr)
-	if err != nil {
-		return
-	}
-
-	ips, err := c.directLookupIP(host, dns.TypeA)
-	if err == spec.ErrDNSTypeANotFound {
-		ips, err = c.directLookupIP(host, dns.TypeAAAA)
-	}
-	if err != nil {
-		return
-	}
-
-	_port, err := strconv.ParseInt(port, 10, 32)
-	if err != nil {
-		return
-	}
-
-	switch network {
-	case "tcp", "tcp4", "tcp6":
-		remoteAddr = &net.TCPAddr{
-			IP:   ips[rand.Intn(len(ips))],
-			Port: int(_port),
-		}
-	case "udp", "udp4", "udp6":
-		remoteAddr = &net.UDPAddr{
-			IP:   ips[rand.Intn(len(ips))],
-			Port: int(_port),
-		}
-	default:
-		err = spec.ErrUnsupportNetwork
-		return
-	}
-
 	handshake := http.Header{}
 	handshake.Add(spec.HeaderHandshakeKey, c.options.Key)
 	handshake.Add(spec.HeaderHandshakeNet, network)
@@ -252,7 +223,7 @@ func (c *TohClient) dial(ctx context.Context, network, addr string) (
 	}
 
 	t1 := time.Now()
-	conn, _, err := websocket.Dial(ctx, c.options.Server, &websocket.DialOptions{
+	conn, resp, err := websocket.Dial(ctx, c.options.Server, &websocket.DialOptions{
 		HTTPHeader: handshake, HTTPClient: c.httpClient,
 	})
 	if err != nil {
@@ -262,10 +233,32 @@ func (c *TohClient) dial(ctx context.Context, network, addr string) (
 		}
 		return
 	}
-	wsConn = newNhooyrWSConn(conn, c.options.Keepalive)
-	go wsConn.runPingLoop()
 	logrus.Debugf("%s://%s established successfully, toh latency %s",
 		network, addr, time.Since(t1))
+
+	wsConn = newNhooyrWSConn(conn, c.options.Keepalive)
+	go wsConn.runPingLoop()
+
+	estAddr := resp.Header.Get(spec.HeaderEstablishAddr)
+	if len(estAddr) == 0 {
+		estAddr = "0.0.0.0:0"
+	}
+	host, _port, err := net.SplitHostPort(estAddr)
+	port, _ := strconv.Atoi(_port)
+	switch network {
+	case "tcp", "tcp4", "tcp6":
+		remoteAddr = &net.TCPAddr{
+			IP:   net.ParseIP(host),
+			Port: port,
+		}
+	case "udp", "udp4", "udp6":
+		remoteAddr = &net.UDPAddr{
+			IP:   net.ParseIP(host),
+			Port: port,
+		}
+	default:
+		err = spec.ErrUnsupportNetwork
+	}
 	return
 }
 
