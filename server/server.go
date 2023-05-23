@@ -11,9 +11,10 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/gobwas/ws"
+	"github.com/gobwas/ws/wsutil"
 	"github.com/rkonfj/toh/spec"
 	"github.com/sirupsen/logrus"
-	"nhooyr.io/websocket"
 )
 
 type TohServer struct {
@@ -81,14 +82,14 @@ func (s TohServer) HandleUpgradeWebSocket(w http.ResponseWriter, r *http.Request
 	}
 	w.Header().Add(spec.HeaderEstablishAddr, netConn.RemoteAddr().String())
 
-	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{})
+	conn, _, _, err := ws.UpgradeHTTP(r, w)
 	if err != nil {
 		logrus.Error(err)
 		return
 	}
 
 	go func() {
-		lbc, rbc := s.pipe(conn, netConn)
+		lbc, rbc := s.pipe(spec.NewWSStreamConn(&wsConn{conn: conn}, conn.RemoteAddr()), netConn)
 		s.trafficEventChan <- &TrafficEvent{
 			In:         lbc,
 			Out:        rbc,
@@ -100,7 +101,7 @@ func (s TohServer) HandleUpgradeWebSocket(w http.ResponseWriter, r *http.Request
 	}()
 }
 
-func (s *TohServer) pipe(wsConn *websocket.Conn, netConn net.Conn) (lbc, rbc int64) {
+func (s *TohServer) pipe(wsConn *spec.WSStreamConn, netConn net.Conn) (lbc, rbc int64) {
 	if wsConn == nil || netConn == nil {
 		return
 	}
@@ -108,18 +109,18 @@ func (s *TohServer) pipe(wsConn *websocket.Conn, netConn net.Conn) (lbc, rbc int
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
+		defer netConn.Close()
 		buf := s.bufPool.Get().(*[]byte)
 		defer s.bufPool.Put(buf)
-		lbc, _ = io.CopyBuffer(netConn, RWWS(wsConn), *buf)
+		lbc, _ = io.CopyBuffer(netConn, wsConn, *buf)
 		logrus.Debugf("ws conn closed, close remote conn(%s) now", netConn.RemoteAddr().String())
-		netConn.Close()
 	}()
+	defer wg.Wait()
+	defer wsConn.Close()
 	buf := s.bufPool.Get().(*[]byte)
 	defer s.bufPool.Put(buf)
-	rbc, _ = io.CopyBuffer(RWWS(wsConn), netConn, *buf)
+	rbc, _ = io.CopyBuffer(wsConn, netConn, *buf)
 	logrus.Debugf("remote conn(%s) closed, close ws conn now", netConn.RemoteAddr().String())
-	wsConn.Close(websocket.StatusBadGateway, "remote close")
-	wg.Wait()
 	return
 }
 
@@ -130,4 +131,30 @@ func (s *TohServer) runShutdownListener() {
 	<-sigs
 	s.acl.Shutdown()
 	os.Exit(0)
+}
+
+type wsConn struct {
+	conn net.Conn
+}
+
+func (c *wsConn) Read(ctx context.Context) (b []byte, err error) {
+	if dl, ok := ctx.Deadline(); ok {
+		c.conn.SetReadDeadline(dl)
+	}
+	return wsutil.ReadClientBinary(c.conn)
+}
+func (c *wsConn) Write(ctx context.Context, p []byte) error {
+	if dl, ok := ctx.Deadline(); ok {
+		c.conn.SetWriteDeadline(dl)
+	}
+	return wsutil.WriteServerBinary(c.conn, p)
+}
+
+func (c *wsConn) LocalAddr() net.Addr {
+	return c.conn.LocalAddr()
+}
+
+func (c *wsConn) Close(code int, reason string) error {
+	ws.WriteFrame(c.conn, ws.NewCloseFrame(ws.NewCloseFrameBody(ws.StatusCode(code), reason)))
+	return c.conn.Close()
 }

@@ -5,28 +5,30 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math/rand"
 	"net"
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
+	"github.com/gobwas/ws"
+	"github.com/gobwas/ws/wsutil"
 	"github.com/miekg/dns"
 	"github.com/rkonfj/toh/server/api"
 	"github.com/rkonfj/toh/spec"
 	"github.com/sirupsen/logrus"
-	"nhooyr.io/websocket"
 )
 
 type TohClient struct {
-	options    Options
-	httpClient *http.Client
-	serverIPs  []net.IP
-	serverPort string
-	dnsClient  *dns.Client
+	options         Options
+	connIdleTimeout time.Duration
+	httpClient      *http.Client
+	serverIPs       []net.IP
+	serverPort      string
+	dnsClient       *dns.Client
 }
 
 type Options struct {
@@ -40,8 +42,9 @@ func NewTohClient(options Options) (*TohClient, error) {
 		return nil, fmt.Errorf("invalid server addr, %s", err.Error())
 	}
 	c := &TohClient{
-		options:   options,
-		dnsClient: &dns.Client{},
+		options:         options,
+		dnsClient:       &dns.Client{},
+		connIdleTimeout: 75 * time.Second,
 	}
 	c.httpClient = &http.Client{
 		Transport: &http.Transport{
@@ -211,7 +214,7 @@ func (c *TohClient) directLookupIP(host string, t uint16) (ips []net.IP, err err
 }
 
 func (c *TohClient) dial(ctx context.Context, network, addr string) (
-	wsConn *nhooyrWSConn, remoteAddr net.Addr, err error) {
+	wsConn *wsConn, remoteAddr net.Addr, err error) {
 	handshake := http.Header{}
 	handshake.Add(spec.HeaderHandshakeKey, c.options.Key)
 	handshake.Add(spec.HeaderHandshakeNet, network)
@@ -223,23 +226,15 @@ func (c *TohClient) dial(ctx context.Context, network, addr string) (
 	}
 
 	t1 := time.Now()
-	conn, resp, err := websocket.Dial(ctx, c.options.Server, &websocket.DialOptions{
-		HTTPHeader: handshake, HTTPClient: c.httpClient,
-	})
+
+	wsConn, respHeader, err := dialWS(ctx, c.options.Server, handshake)
 	if err != nil {
-		if strings.Contains(err.Error(), "401") {
-			err = spec.ErrAuth
-			return
-		}
 		return
 	}
-	logrus.Debugf("%s://%s established successfully, toh latency %s",
-		network, addr, time.Since(t1))
+	logrus.Debugf("%s://%s established successfully, toh latency %s", network, addr, time.Since(t1))
 
-	wsConn = newNhooyrWSConn(conn, c.options.Keepalive)
-	go wsConn.runPingLoop()
-
-	estAddr := resp.Header.Get(spec.HeaderEstablishAddr)
+	go c.newPingLoop(wsConn)
+	estAddr := respHeader.Get(spec.HeaderEstablishAddr)
 	if len(estAddr) == 0 {
 		estAddr = "0.0.0.0:0"
 	}
@@ -262,36 +257,17 @@ func (c *TohClient) dial(ctx context.Context, network, addr string) (
 	return
 }
 
-type nhooyrWSConn struct {
-	*websocket.Conn
-	pingInterval    time.Duration
-	lastActiveTime  time.Time
-	connIdleTimeout time.Duration
-}
-
-func newNhooyrWSConn(conn *websocket.Conn, pingInterval time.Duration) *nhooyrWSConn {
-	return &nhooyrWSConn{
-		Conn:            conn,
-		pingInterval:    pingInterval,
-		lastActiveTime:  time.Now(),
-		connIdleTimeout: 75 * time.Second,
-	}
-}
-
-func (c *nhooyrWSConn) runPingLoop() {
-	if c.pingInterval == 0 {
+func (c *TohClient) newPingLoop(wsConn *wsConn) {
+	if c.options.Keepalive == 0 {
 		return
 	}
 	for {
-		time.Sleep(c.pingInterval)
-		if time.Since(c.lastActiveTime) > c.connIdleTimeout {
+		time.Sleep(c.options.Keepalive)
+		if time.Since(wsConn.lastActiveTime) > c.connIdleTimeout {
 			logrus.Debug("ping: exited. connection reached the max idle time ", c.connIdleTimeout)
 			break
 		}
-		ctx, cancel := context.WithTimeout(context.Background(),
-			spec.MinDuration(2*time.Second, c.pingInterval))
-		defer cancel()
-		err := c.Conn.Ping(ctx)
+		err := wsConn.Ping()
 		if err != nil {
 			logrus.Debug("ping: ", err)
 			break
@@ -299,20 +275,68 @@ func (c *nhooyrWSConn) runPingLoop() {
 	}
 }
 
-func (c *nhooyrWSConn) Read(ctx context.Context) (b []byte, err error) {
-	_, b, err = c.Conn.Read(ctx)
-	c.lastActiveTime = time.Now()
+type wsConn struct {
+	conn           net.Conn
+	lastActiveTime time.Time
+}
+
+func dialWS(ctx context.Context, url string, header http.Header) (
+	wsc *wsConn, respHeader http.Header, err error) {
+	respHeader = http.Header{}
+	var statusCode int
+	dialer := ws.Dialer{
+		Header: ws.HandshakeHeaderHTTP(header),
+		OnHeader: func(key, value []byte) (err error) {
+			respHeader.Add(string(key), string(value))
+			return
+		},
+		OnStatusError: func(status int, reason []byte, resp io.Reader) {
+			statusCode = status
+		},
+	}
+	conn, _, _, err := dialer.Dial(context.Background(), url)
+	if err != nil {
+		return
+	}
+	if statusCode == http.StatusUnauthorized {
+		err = spec.ErrAuth
+		return
+	}
+	if statusCode > 0 {
+		err = errors.New(http.StatusText(statusCode))
+		return
+	}
+	wsc = &wsConn{
+		conn:           conn,
+		lastActiveTime: time.Now(),
+	}
 	return
 }
-func (c *nhooyrWSConn) Write(ctx context.Context, p []byte) error {
+
+func (c *wsConn) Read(ctx context.Context) (b []byte, err error) {
 	c.lastActiveTime = time.Now()
-	return c.Conn.Write(ctx, websocket.MessageBinary, p)
+	if dl, ok := ctx.Deadline(); ok {
+		c.conn.SetReadDeadline(dl)
+	}
+	return wsutil.ReadServerBinary(c.conn)
+}
+func (c *wsConn) Write(ctx context.Context, p []byte) error {
+	c.lastActiveTime = time.Now()
+	if dl, ok := ctx.Deadline(); ok {
+		c.conn.SetWriteDeadline(dl)
+	}
+	return wsutil.WriteClientBinary(c.conn, p)
 }
 
-func (c *nhooyrWSConn) LocalAddr() net.Addr {
-	return nil
+func (c *wsConn) LocalAddr() net.Addr {
+	return c.conn.LocalAddr()
 }
 
-func (c *nhooyrWSConn) Close(code int, reason string) error {
-	return c.Conn.Close(websocket.StatusCode(code), reason)
+func (c *wsConn) Close(code int, reason string) error {
+	ws.WriteFrame(c.conn, ws.NewCloseFrame(ws.NewCloseFrameBody(ws.StatusCode(code), reason)))
+	return c.conn.Close()
+}
+
+func (c *wsConn) Ping() error {
+	return wsutil.WriteClientMessage(c.conn, ws.OpPing, ws.NewPingFrame([]byte{}).Payload)
 }
