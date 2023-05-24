@@ -12,24 +12,11 @@
 - Build
 ```sh
 $ git clone https://github.com/rkonfj/toh.git
-$ go build -ldflags "-s -w"
+$ make linux
 ```
 
 - Run
 ```sh
-$ ./toh serve --help
-ToH server daemon
-
-Usage:
-  toh serve [flags]
-
-Flags:
-      --acl string      file containing access control rules (default "acl.json")
-  -h, --help            help for serve
-  -l, --listen string   http server listen address (default "localhost:9986")
-
-Global Flags:
-      --log-level string   logrus logger level (default "info")
 $ ./toh serve
 time="2023-04-26T21:49:33+08:00" level=info msg="initializing acl file acl.json"
 {
@@ -74,20 +61,6 @@ server {
 ### Port forward tool `pf` act as ToH client
 
 ```sh
-$ ./toh pf --help
-Port-forwarding daemon act as ToH client
-
-Usage:
-  toh pf [flags]
-
-Flags:
-  -k, --api-key string    the ToH api-key for authcate
-  -f, --forward strings   tunnel mapping (i.e. udp/0.0.0.0:53/8.8.8.8:53)
-  -h, --help              help for pf
-      --keepalive string  http/ws conn keepalive. 0s use system default (default "0s")
-  -s, --server string     the ToH server address
-      --udp-buf int       the maximum UDP packet size (default 1472)
-
 $ ./toh pf -s https://fill-in-your-server-here.toh.sh/ws -k 5868a941-3025-4c6d-ad3a-41e29bb42e5f -f udp/127.0.0.53:53/8.8.8.8:53 -f tcp/0.0.0.0:1080/google.com:80
 time="2023-04-28T13:52:31+08:00" level=info msg="listen on 127.0.0.53:53 for udp://8.8.8.8:53 now"
 time="2023-04-28T13:52:31+08:00" level=info msg="listen on 0.0.0.0:1080 for tcp://google.com:80 now"
@@ -109,23 +82,6 @@ The document has moved
 
 ### Socks5+http proxy server `s5` act as ToH client
 ```sh
-$ ./toh s5 --help
-Socks5+http proxy server act as ToH client
-
-Usage:
-  toh s5 [flags]
-
-Flags:
-  -c, --config string       config file (default is $HOME/.config/toh/socks5.yml)
-      --dns string          local dns upstream (leave blank to disable local dns)
-      --dns-evict string    local dns cache evict duration (default "2h")
-      --dns-fake string     local fake dns (leave blank to disable fake dns)
-      --dns-listen string   local dns listen address (default "0.0.0.0:2053")
-  -h, --help                help for s5
-  -l, --listen string       socks5+http listen address (specify this to override from config)
-
-Global Flags:
-      --log-level string   logrus logger level (default "info")
 $ ./toh s5
 time="2023-05-12T15:02:11Z" level=info msg="initializing config file /root/.config/toh/socks5.yml"
 geoip2: country.mmdb
@@ -143,15 +99,15 @@ time="2023-05-12T15:02:14Z" level=info msg="total loaded 1 proxy servers and 0 g
 time="2023-05-12T15:02:14Z" level=info msg="downloading /root/.config/toh/country.mmdb (this can take up to 5m0s)"
 time="2023-05-12T15:05:17Z" level=info msg="listen on localhost:2080 for socks5 now"
 ```
-> • full configurable options can be viewed [here](https://github.com/rkonfj/toh/blob/main/cmd/s5/server/config.go)  
-> • the server `us1` is the test server, will stopped in the future
+- full configuration can be viewed [here](https://github.com/rkonfj/toh/blob/main/cmd/s5/server/config.go)  
+- the server `us1` is the test server, will stopped in the future
 
 **another shell**
 ```sh
-$ https_proxy=socks5://127.0.0.1:2080 curl -i https://api64.ipify.org
+$ https_proxy=socks5://127.0.0.1:2080 curl https://api64.ipify.org
 104.207.152.45
 ```
 thats great! the `104.207.152.45` is your proxy ip
 
 ### Android project `tohdroid` act as ToH client
-see project [tohdroid](https://github.com/rkonfj/tohdroid)
+see project [tohdroid](https://github.com/rkonfj/tohdroid) for details
