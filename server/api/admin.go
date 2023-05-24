@@ -141,3 +141,22 @@ func (c *ServerAdminClient) ACLDelUsage(key string) (err error) {
 	}
 	return
 }
+
+func (c *ServerAdminClient) ACLShow() (keys []Key, err error) {
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/admin/acl", c.server), nil)
+	if err != nil {
+		return
+	}
+	req.Header.Add(spec.HeaderHandshakeKey, c.adminKey)
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized {
+		err = spec.ErrAuth
+		return
+	}
+	err = json.NewDecoder(resp.Body).Decode(&keys)
+	return
+}

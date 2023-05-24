@@ -67,12 +67,20 @@ func init() {
 	cmdUsage.Flags().Bool("reset", false, "reset acl key usage")
 	cmdUsage.MarkFlagRequired("key")
 
+	cmdShowACL := &cobra.Command{
+		Use:   "show",
+		Short: "show acl keys",
+		Args:  cobra.NoArgs,
+		RunE:  aclShow,
+	}
+
 	Cmd.PersistentFlags().StringP("server", "s", "http://127.0.0.1:9986", "toh server")
 	Cmd.PersistentFlags().StringP("admin-key", "k", "", "toh server admin key (default read from admin-key file)")
 	Cmd.AddCommand(cmdNew)
 	Cmd.AddCommand(cmdDel)
 	Cmd.AddCommand(cmdLimit)
 	Cmd.AddCommand(cmdUsage)
+	Cmd.AddCommand(cmdShowACL)
 }
 
 func initAction(cmd *cobra.Command, args []string) (err error) {
@@ -222,6 +230,17 @@ func aclUsage(cmd *cobra.Command, args []string) (err error) {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "    ")
 	err = enc.Encode(usage)
+	return
+}
+
+func aclShow(cmd *cobra.Command, args []string) (err error) {
+	keys, err := cli.ACLShow()
+	if err != nil {
+		return
+	}
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "    ")
+	err = enc.Encode(keys)
 	return
 }
 

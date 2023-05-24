@@ -21,6 +21,7 @@ func (s *AdminAPI) Register() {
 	http.HandleFunc("/admin/acl/key", s.withAuth(s.HandleKey))
 	http.HandleFunc("/admin/acl/limit", s.withAuth(s.HandleLimit))
 	http.HandleFunc("/admin/acl/usage", s.withAuth(s.HandleUsage))
+	http.HandleFunc("/admin/acl", s.withAuth(s.HandleShowACL))
 	logrus.Info("admin api(/admin/**) is enabled")
 }
 
@@ -101,6 +102,15 @@ func (s *AdminAPI) HandleUsage(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(usage)
 	case http.MethodDelete:
 		s.ACL.DelUsage(key)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *AdminAPI) HandleShowACL(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		json.NewEncoder(w).Encode(s.ACL.Storage().Keys)
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}

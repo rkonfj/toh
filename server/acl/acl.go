@@ -36,14 +36,7 @@ type ACL struct {
 }
 
 type ACLStorage struct {
-	Keys []*Key `json:"keys"`
-}
-
-type Key struct {
-	Name       string          `json:"name,omitempty"`
-	Key        string          `json:"key"`
-	Limit      *api.Limit      `json:"limit,omitempty"`
-	BytesUsage *api.BytesUsage `json:"bytesUsage,omitempty"`
+	Keys []*api.Key `json:"keys"`
 }
 
 type key struct {
@@ -113,7 +106,7 @@ func NewACL(aclPath, adminKey string) (*ACL, error) {
 		buf := make([]byte, 32)
 		rand.Reader.Read(buf)
 		sto = ACLStorage{
-			Keys: []*Key{{Name: "default", Key: base64.RawStdEncoding.EncodeToString(buf)}},
+			Keys: []*api.Key{{Name: "default", Key: base64.RawStdEncoding.EncodeToString(buf)}},
 		}
 		enc := json.NewEncoder(spec.NewConfigWriter(aclF))
 		enc.SetIndent("", "    ")
@@ -217,7 +210,7 @@ func (a *ACL) NewKey(name string) string {
 	rand.Reader.Read(buf)
 	k := base64.RawStdEncoding.EncodeToString(buf)
 
-	ke := &Key{
+	ke := &api.Key{
 		Name: name,
 		Key:  k,
 	}
@@ -288,6 +281,10 @@ func (a *ACL) DelUsage(key string) {
 	if k, ok := a.keys[key]; ok {
 		k.bytesUsage = &api.BytesUsage{}
 	}
+}
+
+func (a *ACL) Storage() *ACLStorage {
+	return a.sto
 }
 
 func (a *ACL) Shutdown() {
