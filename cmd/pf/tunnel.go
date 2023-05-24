@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -20,6 +21,7 @@ type Options struct {
 	Server, Key string
 	UDPBuf      int64
 	Keepalive   time.Duration
+	Headers     []string
 }
 
 type TunnelManager struct {
@@ -37,12 +39,23 @@ type mapping struct {
 }
 
 func NewTunnelManager(opts Options) (*TunnelManager, error) {
-	c, err := client.NewTohClient(client.Options{
+	clientOpts := client.Options{
 		Server:    opts.Server,
 		Key:       opts.Key,
 		Keepalive: opts.Keepalive,
-	})
+		Headers:   http.Header{},
+	}
 
+	for _, kv := range opts.Headers {
+		kvs := strings.Split(kv, ":")
+		if len(kvs) != 2 {
+			logrus.Warnf("incorrect header format: %s, correct should be key:value", kv)
+			continue
+		}
+		clientOpts.Headers.Add(strings.TrimSpace(kvs[0]), strings.TrimSpace(kvs[1]))
+	}
+
+	c, err := client.NewTohClient(clientOpts)
 	if err != nil {
 		return nil, err
 	}

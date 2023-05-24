@@ -19,6 +19,7 @@ func init() {
 	Cmd.Flags().StringP("key", "k", "", "the ToH api-key for authcate")
 	Cmd.Flags().String("keepalive", "0s", "http/ws conn keepalive. 0s use system default")
 	Cmd.Flags().Int64("udp-buf", 1472, "the maximum UDP packet size")
+	Cmd.Flags().StringSliceP("header", "e", []string{}, "additional http headers sent to the ToH server")
 	Cmd.Flags().StringSliceP("forward", "f", []string{}, "tunnel mapping (i.e. udp/0.0.0.0:53/8.8.8.8:53)")
 
 	Cmd.MarkFlagRequired("server")
@@ -43,6 +44,10 @@ func startAction(cmd *cobra.Command, args []string) error {
 
 func processOptions(cmd *cobra.Command) (options Options, err error) {
 	options.Forwards, err = cmd.Flags().GetStringSlice("forward")
+	if err != nil {
+		return
+	}
+	options.Headers, err = cmd.Flags().GetStringSlice("header")
 	if err != nil {
 		return
 	}
