@@ -24,7 +24,6 @@ import (
 	"github.com/rkonfj/toh/socks5"
 	"github.com/rkonfj/toh/spec"
 	"github.com/sirupsen/logrus"
-	"golang.org/x/exp/slices"
 )
 
 type Options struct {
@@ -199,7 +198,7 @@ func (s *S5Server) loadGroups() (err error) {
 			servers: []*Server{},
 		}
 		for _, s := range s.servers {
-			if slices.Contains(g.Servers, s.name) {
+			if spec.SliceIndex(g.Servers, s.name) >= 0 {
 				group.servers = append(group.servers, s)
 			}
 		}

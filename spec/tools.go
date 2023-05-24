@@ -18,6 +18,15 @@ func MinDuration(x, y time.Duration) time.Duration {
 	return y
 }
 
+func SliceIndex[E comparable](s []E, v E) int {
+	for i, vs := range s {
+		if v == vs {
+			return i
+		}
+	}
+	return -1
+}
+
 func Uint16ToBytes(n uint16) []byte {
 	bytebuf := &bytes.Buffer{}
 	binary.Write(bytebuf, binary.BigEndian, n)
