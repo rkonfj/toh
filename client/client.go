@@ -280,7 +280,7 @@ type wsConn struct {
 	lastActiveTime time.Time
 }
 
-func dialWS(ctx context.Context, url string, header http.Header) (
+func dialWS(ctx context.Context, urlstr string, header http.Header) (
 	wsc *wsConn, respHeader http.Header, err error) {
 	respHeader = http.Header{}
 	var statusCode int
@@ -294,7 +294,17 @@ func dialWS(ctx context.Context, url string, header http.Header) (
 			statusCode = status
 		},
 	}
-	conn, _, _, err := dialer.Dial(context.Background(), url)
+	u, err := url.Parse(urlstr)
+	if err != nil {
+		return
+	}
+	switch u.Scheme {
+	case "http":
+		u.Scheme = "ws"
+	case "https":
+		u.Scheme = "wss"
+	}
+	conn, _, _, err := dialer.Dial(context.Background(), u.String())
 	if err != nil {
 		return
 	}
