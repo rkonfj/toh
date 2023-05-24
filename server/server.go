@@ -13,13 +13,16 @@ import (
 
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
+	"github.com/rkonfj/toh/server/acl"
+	"github.com/rkonfj/toh/server/admin"
 	"github.com/rkonfj/toh/spec"
 	"github.com/sirupsen/logrus"
 )
 
 type TohServer struct {
+	adminAPI         *admin.AdminAPI
 	options          Options
-	acl              *ACL
+	acl              *acl.ACL
 	trafficEventChan chan *TrafficEvent
 	bufPool          *sync.Pool
 }
@@ -32,13 +35,14 @@ type Options struct {
 }
 
 func NewTohServer(options Options) (*TohServer, error) {
-	acl, err := NewACL(options.ACL, options.AdminKey)
+	acl, err := acl.NewACL(options.ACL, options.AdminKey)
 	if err != nil {
 		return nil, err
 	}
 	return &TohServer{
 		options:          options,
 		acl:              acl,
+		adminAPI:         &admin.AdminAPI{ACL: acl},
 		trafficEventChan: make(chan *TrafficEvent, 2048),
 		bufPool: &sync.Pool{New: func() any {
 			buf := make([]byte, int(math.Max(float64(options.Buf), 512)))
@@ -50,7 +54,7 @@ func NewTohServer(options Options) (*TohServer, error) {
 func (s *TohServer) Run() {
 	go s.runTrafficEventConsumeLoop()
 	go s.runShutdownListener()
-	s.registerAdminAPIIfEnabled()
+	s.adminAPI.Register()
 
 	http.HandleFunc("/stats", s.HandleShowStats)
 	http.HandleFunc("/", s.HandleUpgradeWebSocket)

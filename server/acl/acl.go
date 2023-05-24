@@ -1,4 +1,4 @@
-package server
+package acl
 
 import (
 	"encoding/json"
@@ -140,7 +140,11 @@ func NewACL(aclPath, adminKey string) (*ACL, error) {
 }
 
 func (a *ACL) IsAdminAccess(key string) bool {
-	return a.adminKey != "" && a.adminKey == key
+	return a.AdminEnabled() && a.adminKey == key
+}
+
+func (a *ACL) AdminEnabled() bool {
+	return a.adminKey != ""
 }
 
 func (a *ACL) CheckKey(key string) error {

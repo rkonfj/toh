@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/dustin/go-humanize"
+	"github.com/rkonfj/toh/server/acl"
 	"github.com/rkonfj/toh/server/api"
 	"github.com/rkonfj/toh/spec"
 	"github.com/sirupsen/logrus"
@@ -34,29 +34,31 @@ func (s *TohServer) runTrafficEventConsumeLoop() {
 	}
 }
 
-func (s TohServer) HandleShowStats(w http.ResponseWriter, r *http.Request) {
+func (s *TohServer) HandleShowStats(w http.ResponseWriter, r *http.Request) {
 	apiKey := r.Header.Get(spec.HeaderHandshakeKey)
 	clientIP := spec.RealIP(r)
 	err := s.acl.CheckKey(apiKey)
-	if err == ErrInvalidKey {
+	if err == acl.ErrInvalidKey {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 	logrus.Debugf("ip %s query %s stats", clientIP, apiKey)
-	key := s.acl.keys[apiKey]
+	limit := s.acl.GetLimit(apiKey)
+	usage := s.acl.GetUsage(apiKey)
 	stats := api.Stats{
-		BytesUsage: key.bytesUsage,
+		BytesUsage: usage,
 	}
-	if key.bytesLimit > 0 {
-		stats.BytesLimit = humanize.Bytes(key.bytesLimit)
+	if len(limit.Bytes) > 0 {
+		stats.BytesLimit = limit.Bytes
 	}
-	if key.inBytesLimit > 0 {
-		stats.InBytesLimit = humanize.Bytes(key.inBytesLimit)
+	if len(limit.InBytes) > 0 {
+		stats.InBytesLimit = limit.InBytes
 	}
-	if key.outBytesLimit > 0 {
-		stats.OutBytesLimit = humanize.Bytes(key.outBytesLimit)
+	if len(limit.OutBytes) > 0 {
+		stats.OutBytesLimit = limit.OutBytes
 	}
 	stats.Status = "ok"
+
 	if err != nil {
 		stats.Status = err.Error()
 	}

@@ -1,33 +1,45 @@
-package server
+package admin
 
 import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/rkonfj/toh/server/acl"
 	"github.com/rkonfj/toh/server/api"
 	"github.com/rkonfj/toh/spec"
 	"github.com/sirupsen/logrus"
 )
 
-func (s *TohServer) registerAdminAPIIfEnabled() {
-	if s.options.AdminKey == "" {
+type AdminAPI struct {
+	ACL *acl.ACL
+}
+
+func (s *AdminAPI) Register() {
+	if !s.ACL.AdminEnabled() {
 		return
 	}
-	http.HandleFunc("/admin/acl/key", s.HandleAdminKey)
-	http.HandleFunc("/admin/acl/limit", s.HandleAdminLimit)
-	http.HandleFunc("/admin/acl/usage", s.HandleAdminUsage)
+	http.HandleFunc("/admin/acl/key", s.withAuth(s.HandleKey))
+	http.HandleFunc("/admin/acl/limit", s.withAuth(s.HandleLimit))
+	http.HandleFunc("/admin/acl/usage", s.withAuth(s.HandleUsage))
 	logrus.Info("admin api(/admin/**) is enabled")
 }
 
-func (s *TohServer) HandleAdminKey(w http.ResponseWriter, r *http.Request) {
-	if !s.acl.IsAdminAccess(r.Header.Get(spec.HeaderHandshakeKey)) {
-		w.WriteHeader(http.StatusUnauthorized)
-		return
+func (s *AdminAPI) withAuth(handle func(http.ResponseWriter, *http.Request)) func(
+	http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !s.ACL.IsAdminAccess(r.Header.Get(spec.HeaderHandshakeKey)) {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		handle(w, r)
 	}
+}
+
+func (s *AdminAPI) HandleKey(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodPost:
 		name := r.URL.Query().Get("name")
-		key := s.acl.NewKey(name)
+		key := s.ACL.NewKey(name)
 		w.Write([]byte(key))
 	case http.MethodDelete:
 		key := r.URL.Query().Get("key")
@@ -36,17 +48,13 @@ func (s *TohServer) HandleAdminKey(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte("required key parameter not found in url"))
 			return
 		}
-		s.acl.DelKey(key)
+		s.ACL.DelKey(key)
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
 }
 
-func (s *TohServer) HandleAdminLimit(w http.ResponseWriter, r *http.Request) {
-	if !s.acl.IsAdminAccess(r.Header.Get(spec.HeaderHandshakeKey)) {
-		w.WriteHeader(http.StatusUnauthorized)
-		return
-	}
+func (s *AdminAPI) HandleLimit(w http.ResponseWriter, r *http.Request) {
 	key := r.URL.Query().Get("key")
 	if key == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -67,24 +75,20 @@ func (s *TohServer) HandleAdminLimit(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte(err.Error()))
 			return
 		}
-		err = s.acl.Limit(key, &l)
+		err = s.ACL.Limit(key, &l)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			w.Write([]byte(err.Error()))
 		}
 	case http.MethodGet:
-		l := s.acl.GetLimit(key)
+		l := s.ACL.GetLimit(key)
 		json.NewEncoder(w).Encode(l)
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
 }
 
-func (s *TohServer) HandleAdminUsage(w http.ResponseWriter, r *http.Request) {
-	if !s.acl.IsAdminAccess(r.Header.Get(spec.HeaderHandshakeKey)) {
-		w.WriteHeader(http.StatusUnauthorized)
-		return
-	}
+func (s *AdminAPI) HandleUsage(w http.ResponseWriter, r *http.Request) {
 	key := r.URL.Query().Get("key")
 	if key == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -93,10 +97,10 @@ func (s *TohServer) HandleAdminUsage(w http.ResponseWriter, r *http.Request) {
 	}
 	switch r.Method {
 	case http.MethodGet:
-		usage := s.acl.GetUsage(key)
+		usage := s.ACL.GetUsage(key)
 		json.NewEncoder(w).Encode(usage)
 	case http.MethodDelete:
-		s.acl.DelUsage(key)
+		s.ACL.DelUsage(key)
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
