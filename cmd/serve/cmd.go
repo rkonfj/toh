@@ -17,7 +17,7 @@ func init() {
 	}
 	Cmd.Flags().String("acl", "acl.json", "file containing access control rules")
 	Cmd.Flags().String("admin-key", "", "key to access the admin api (leave blank to disable admin api)")
-	Cmd.Flags().String("copy-buf", "16Ki", "buffer size for copying network data")
+	Cmd.Flags().String("copy-buf", "32ki", "buffer size for copying network data")
 	Cmd.Flags().StringP("listen", "l", "127.0.0.1:9986", "http server listen address")
 }
 

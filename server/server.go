@@ -45,7 +45,7 @@ func NewTohServer(options Options) (*TohServer, error) {
 		adminAPI:         &admin.AdminAPI{ACL: acl},
 		trafficEventChan: make(chan *TrafficEvent, 2048),
 		bufPool: &sync.Pool{New: func() any {
-			buf := make([]byte, int(math.Max(float64(options.Buf), 512)))
+			buf := make([]byte, int(math.Max(float64(options.Buf), 1472)))
 			return &buf
 		}},
 	}, nil
