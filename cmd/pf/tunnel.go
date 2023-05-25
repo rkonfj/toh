@@ -20,6 +20,7 @@ type Options struct {
 	Forwards    []string
 	Server, Key string
 	UDPBuf      int64
+	TCPBuf      int64
 	Keepalive   time.Duration
 	Headers     []string
 }
@@ -160,8 +161,8 @@ func (t *TunnelManager) forwardUDP(mp mapping) (err error) {
 func (t *TunnelManager) pipe(l, r net.Conn) {
 	defer l.Close()
 	defer r.Close()
-	go io.Copy(l, r)
-	io.Copy(r, l)
+	go io.CopyBuffer(l, r, make([]byte, t.opts.TCPBuf))
+	io.CopyBuffer(r, l, make([]byte, t.opts.TCPBuf))
 }
 
 func (t *TunnelManager) pipeUDP(l net.PacketConn, r net.Conn) {
