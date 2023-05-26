@@ -17,6 +17,9 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+var errOnlyOnceMapToStdio error = errors.New(
+	"only one communication target can be mapped to stdio")
+
 type Options struct {
 	Forwards    []string
 	Server, Key string
@@ -63,6 +66,7 @@ func NewTunnelManager(opts Options) (*TunnelManager, error) {
 	}
 
 	var forwards []mapping
+	var stdioMapping *mapping
 
 	for _, f := range opts.Forwards {
 		rawMp := strings.Split(f, "/")
@@ -71,12 +75,20 @@ func NewTunnelManager(opts Options) (*TunnelManager, error) {
 		}
 		mp := mapping{network: rawMp[0], bo: backoff.NewExponentialBackOff()}
 		if len(rawMp) == 2 {
+			if stdioMapping != nil {
+				return nil, errOnlyOnceMapToStdio
+			}
 			mp.local = "stdio"
 			mp.remote = rawMp[1]
+			stdioMapping = &mp
 			logrus.SetOutput(os.Stderr)
 		} else {
-			if len(rawMp) == 0 {
+			if len(rawMp[1]) == 0 {
+				if stdioMapping != nil {
+					return nil, errOnlyOnceMapToStdio
+				}
 				mp.local = "stdio"
+				stdioMapping = &mp
 			} else {
 				mp.local = rawMp[1]
 			}
