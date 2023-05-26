@@ -26,7 +26,7 @@ func init() {
 	Cmd.Flags().String("dns", "", "local dns upstream (leave blank to disable local dns)")
 	Cmd.Flags().String("dns-listen", "127.0.0.1:2053", "local dns listen address")
 	Cmd.Flags().String("dns-evict", "2h", "local dns cache evict duration")
-	Cmd.Flags().String("dns-fake", "", "local fake dns (leave blank to disable fake dns)")
+	Cmd.Flags().StringSlice("dns-fake", []string{}, "local fake dns (leave blank to disable fake dns)")
 }
 
 func startAction(cmd *cobra.Command, args []string) error {
@@ -56,7 +56,7 @@ func processOptions(cmd *cobra.Command) (opts server.Options, err error) {
 		return
 	}
 
-	opts.DNSFake, err = cmd.Flags().GetString("dns-fake")
+	opts.DNSFake, err = cmd.Flags().GetStringSlice("dns-fake")
 	if err != nil {
 		return
 	}

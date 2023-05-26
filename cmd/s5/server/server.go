@@ -35,7 +35,7 @@ type Options struct {
 	DataRoot string
 	// when using socks5 proxy dns query, if the query dns is consistent with the fake ip
 	// the query request will be processed by the built-in local dns
-	DNSFake string
+	DNSFake []string
 	// build-in local dns listen address
 	DNSListen string
 	// build-in local dns used upstream dns
@@ -235,10 +235,14 @@ func (s *S5Server) registerHTTPHandlers() {
 func (s *S5Server) dial(ctx context.Context, addr, network string) (
 	dialerName string, conn net.Conn, err error) {
 	// dial localdns instead of fake dns
-	if len(s.opts.DNSFake) > 0 && len(s.opts.DNSUpstream) > 0 && strings.Contains(addr, s.opts.DNSFake) {
-		dialerName = "direct"
-		conn, err = s.defaultDialer.Dial(network, s.opts.DNSListen)
-		return
+	if len(s.opts.DNSFake) > 0 && len(s.opts.DNSUpstream) > 0 {
+		for _, fake := range s.opts.DNSFake {
+			if strings.Contains(addr, fake) {
+				dialerName = "direct"
+				conn, err = s.defaultDialer.Dial(network, s.opts.DNSListen)
+				return
+			}
+		}
 	}
 
 	host, port, err := net.SplitHostPort(addr)
