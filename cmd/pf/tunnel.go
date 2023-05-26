@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -64,11 +65,24 @@ func NewTunnelManager(opts Options) (*TunnelManager, error) {
 	var forwards []mapping
 
 	for _, f := range opts.Forwards {
-		mp := strings.Split(f, "/")
-		if len(mp) != 3 {
+		rawMp := strings.Split(f, "/")
+		if len(rawMp) < 2 || len(rawMp) > 3 {
 			return nil, errors.New("invalid forward " + f)
 		}
-		forwards = append(forwards, mapping{network: mp[0], local: mp[1], remote: mp[2], bo: backoff.NewExponentialBackOff()})
+		mp := mapping{network: rawMp[0], bo: backoff.NewExponentialBackOff()}
+		if len(rawMp) == 2 {
+			mp.local = "stdio"
+			mp.remote = rawMp[1]
+			logrus.SetOutput(os.Stderr)
+		} else {
+			if len(rawMp) == 0 {
+				mp.local = "stdio"
+			} else {
+				mp.local = rawMp[1]
+			}
+			mp.remote = rawMp[2]
+		}
+		forwards = append(forwards, mp)
 	}
 
 	return &TunnelManager{
@@ -109,6 +123,16 @@ func (t *TunnelManager) forward(mp mapping) {
 }
 
 func (t *TunnelManager) forwardTCP(mp mapping) (err error) {
+	if mp.local == "stdio" {
+		rConn, _err := t.client.DialTCP(context.Background(), mp.remote)
+		if _err != nil {
+			err = _err
+			return
+		}
+		t.pipe(&stdRW{Reader: os.Stdin, Writer: os.Stdout}, rConn)
+		return
+	}
+
 	listener, err := net.Listen(mp.network, mp.local)
 	if err != nil {
 		return
@@ -132,6 +156,15 @@ func (t *TunnelManager) forwardTCP(mp mapping) (err error) {
 }
 
 func (t *TunnelManager) forwardUDP(mp mapping) (err error) {
+	if mp.local == "stdio" {
+		rConn, _err := t.client.DialUDP(context.Background(), mp.remote)
+		if _err != nil {
+			err = _err
+			return
+		}
+		t.pipe(&stdRW{Reader: os.Stdin, Writer: os.Stdout}, rConn)
+		return
+	}
 	host, port, err := net.SplitHostPort(mp.local)
 	if err != nil {
 		return
@@ -158,7 +191,7 @@ func (t *TunnelManager) forwardUDP(mp mapping) (err error) {
 	return
 }
 
-func (t *TunnelManager) pipe(l, r net.Conn) {
+func (t *TunnelManager) pipe(l, r io.ReadWriteCloser) {
 	defer l.Close()
 	defer r.Close()
 	go io.CopyBuffer(l, r, make([]byte, t.opts.TCPBuf))
@@ -195,4 +228,21 @@ func (t *TunnelManager) pipeUDP(l net.PacketConn, r net.Conn) {
 			break
 		}
 	}
+}
+
+type stdRW struct {
+	io.Reader
+	io.Writer
+}
+
+func (s *stdRW) Read(p []byte) (n int, err error) {
+	return s.Reader.Read(p)
+}
+
+func (s *stdRW) Write(p []byte) (n int, err error) {
+	return s.Writer.Write(p)
+}
+
+func (s *stdRW) Close() error {
+	return nil
 }
