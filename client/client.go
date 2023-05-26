@@ -25,6 +25,7 @@ import (
 type TohClient struct {
 	options         Options
 	connIdleTimeout time.Duration
+	netDial         func(ctx context.Context, network, addr string) (conn net.Conn, err error)
 	httpClient      *http.Client
 	serverIPs       []net.IP
 	serverPort      string
@@ -46,27 +47,28 @@ func NewTohClient(options Options) (*TohClient, error) {
 		dnsClient:       &dns.Client{},
 		connIdleTimeout: 75 * time.Second,
 	}
+	c.netDial = func(ctx context.Context, network, addr string) (conn net.Conn, err error) {
+		if len(c.serverIPs) == 0 {
+			var host string
+			host, c.serverPort, err = net.SplitHostPort(addr)
+			if err != nil {
+				return
+			}
+			c.serverIPs, err = c.directLookupIP(host, dns.TypeA)
+			if err == spec.ErrDNSTypeANotFound {
+				c.serverIPs, err = c.directLookupIP(host, dns.TypeAAAA)
+			}
+			if err != nil {
+				err = spec.ErrDNSRecordNotFound
+				return
+			}
+		}
+		return (&net.Dialer{}).DialContext(ctx, network,
+			net.JoinHostPort(c.serverIPs[rand.Intn(len(c.serverIPs))].String(), c.serverPort))
+	}
 	c.httpClient = &http.Client{
 		Transport: &http.Transport{
-			DialContext: func(ctx context.Context, network, addr string) (conn net.Conn, err error) {
-				if len(c.serverIPs) == 0 {
-					var host string
-					host, c.serverPort, err = net.SplitHostPort(addr)
-					if err != nil {
-						return
-					}
-					c.serverIPs, err = c.directLookupIP(host, dns.TypeA)
-					if err == spec.ErrDNSTypeANotFound {
-						c.serverIPs, err = c.directLookupIP(host, dns.TypeAAAA)
-					}
-					if err != nil {
-						err = spec.ErrDNSRecordNotFound
-						return
-					}
-				}
-				return (&net.Dialer{}).DialContext(ctx, network,
-					net.JoinHostPort(c.serverIPs[rand.Intn(len(c.serverIPs))].String(), c.serverPort))
-			},
+			DialContext: c.netDial,
 		},
 	}
 	return c, nil
@@ -233,7 +235,7 @@ func (c *TohClient) dial(ctx context.Context, network, addr string) (
 
 	t1 := time.Now()
 
-	wsConn, respHeader, err := dialWS(ctx, c.options.Server, handshake)
+	wsConn, respHeader, err := c.dialWS(ctx, c.options.Server, handshake)
 	if err != nil {
 		return
 	}
@@ -281,17 +283,13 @@ func (c *TohClient) newPingLoop(wsConn *wsConn) {
 	}
 }
 
-type wsConn struct {
-	conn           net.Conn
-	lastActiveTime time.Time
-}
-
-func dialWS(ctx context.Context, urlstr string, header http.Header) (
+func (c *TohClient) dialWS(ctx context.Context, urlstr string, header http.Header) (
 	wsc *wsConn, respHeader http.Header, err error) {
 	respHeader = http.Header{}
 	var statusCode int
 	dialer := ws.Dialer{
-		Header: ws.HandshakeHeaderHTTP(header),
+		NetDial: c.netDial,
+		Header:  ws.HandshakeHeaderHTTP(header),
 		OnHeader: func(key, value []byte) (err error) {
 			respHeader.Add(string(key), string(value))
 			return
@@ -327,6 +325,11 @@ func dialWS(ctx context.Context, urlstr string, header http.Header) (
 		lastActiveTime: time.Now(),
 	}
 	return
+}
+
+type wsConn struct {
+	conn           net.Conn
+	lastActiveTime time.Time
 }
 
 func (c *wsConn) Read(ctx context.Context) (b []byte, err error) {
