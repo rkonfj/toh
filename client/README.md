@@ -38,3 +38,37 @@ func main() {
 }
 
 ```
+**UDP**
+
+```
+package main
+
+import (
+	"context"
+	"fmt"
+	"net"
+
+	"github.com/rkonfj/toh/client"
+)
+
+func main() {
+	c, err := client.NewTohClient(client.Options{
+		Server: "https://fill-in-your-server-here.toh.sh",
+		Key:    "5868a941-3025-4c6d-ad3a-41e29bb42e5f",
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	resolver := net.Resolver{
+		PreferGo: true,
+		Dial:     c.DialContext,
+	}
+
+	ips, err := resolver.LookupIP(context.Background(), "ip", "www.google.com")
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(ips)
+}
+```

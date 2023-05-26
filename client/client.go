@@ -121,14 +121,20 @@ func (c *TohClient) DialUDP(ctx context.Context, addr string) (net.Conn, error) 
 
 func (c *TohClient) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
 	switch network {
-	case "tcp", "tcp4", "tcp6", "udp", "udp4", "udp6":
+	case "tcp", "tcp4", "tcp6":
 		conn, addr, err := c.dial(ctx, network, address)
 		if err != nil {
 			return nil, err
 		}
 		return spec.NewWSStreamConn(conn, addr), nil
+	case "udp", "udp4", "udp6":
+		conn, addr, err := c.dial(ctx, network, address)
+		if err != nil {
+			return nil, err
+		}
+		return &spec.PacketConnWrapper{Conn: spec.NewWSStreamConn(conn, addr)}, nil
 	default:
-		return nil, errors.New("unsupport network")
+		return nil, errors.New("unsupport network " + network)
 	}
 }
 func (c *TohClient) Stats() (s *api.Stats, err error) {
