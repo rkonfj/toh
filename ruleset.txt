@@ -25,6 +25,7 @@
 ! GitHub
 .github.com
 .githubusercontent.com
+.github.blog
 
 ! Go
 .go.dev
@@ -52,6 +53,10 @@
 .docker.com
 .k8s.io
 
+! Telegram
+.t.me
+.telegram.org
+
 ! The New York Times
 .nytimes.com
 .nyt.com
@@ -64,3 +69,4 @@
 .cloudflare.com
 .netflix.com
 .grafana.com
+.jsdelivr.net
