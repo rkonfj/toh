@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -159,16 +160,21 @@ func (c *WSStreamConn) SetWriteDeadline(t time.Time) error {
 // PacketConnWrapper wrap UDP conn
 type PacketConnWrapper struct {
 	net.Conn
+	l sync.RWMutex
 }
 
 func (c *PacketConnWrapper) WriteTo(b []byte, addr net.Addr) (int, error) {
 	if c.RemoteAddr().String() != addr.String() {
 		return 0, errors.New("connection-oriented UDP does not allow write to another address")
 	}
+	c.l.Lock()
+	defer c.l.Unlock()
 	return c.Conn.Write(b)
 }
 
 func (c *PacketConnWrapper) ReadFrom(b []byte) (int, net.Addr, error) {
+	c.l.Lock()
+	defer c.l.Unlock()
 	n, err := c.Conn.Read(b)
 	return n, c.RemoteAddr(), err
 }
