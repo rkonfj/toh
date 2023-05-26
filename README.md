@@ -59,15 +59,17 @@ server {
 }
 ```
 ### Port forward tool `pf` act as ToH client
-
+- SSH over HTTP
+```
+$ ssh -o ProxyCommand="./toh pf -s https://fill-in-your-server-here.toh.sh/ws -k 5868a941-3025-4c6d-ad3a-41e29bb42e5f -f tcp/%h:%p" root@127.0.0.1
+```
+- Common use case
 ```sh
 $ ./toh pf -s https://fill-in-your-server-here.toh.sh/ws -k 5868a941-3025-4c6d-ad3a-41e29bb42e5f -f udp/127.0.0.53:53/8.8.8.8:53 -f tcp/0.0.0.0:1080/google.com:80
 time="2023-04-28T13:52:31+08:00" level=info msg="listen on 127.0.0.53:53 for udp://8.8.8.8:53 now"
 time="2023-04-28T13:52:31+08:00" level=info msg="listen on 0.0.0.0:1080 for tcp://google.com:80 now"
-```
 
-**another shell**
-```sh
+$ # run in another shell
 $ dig @127.0.0.53 www.google.com +short
 142.250.68.4
 
@@ -98,16 +100,14 @@ time="2023-05-12T15:02:14Z" level=info msg="ruleset   us1: special 0, direct 0, 
 time="2023-05-12T15:02:14Z" level=info msg="total loaded 1 proxy servers and 0 groups"
 time="2023-05-12T15:02:14Z" level=info msg="downloading /root/.config/toh/country.mmdb (this can take up to 5m0s)"
 time="2023-05-12T15:05:17Z" level=info msg="listen on localhost:2080 for socks5 now"
+
+$ # run in another shell
+$ https_proxy=socks5://127.0.0.1:2080 curl https://api64.ipify.org
+104.207.152.45
+$ # wow, great! the `104.207.152.45` is your proxy ip
 ```
 - full configuration can be viewed [here](https://github.com/rkonfj/toh/blob/main/cmd/s5/server/config.go)  
 - the server `us1` is the test server, will stopped in the future
-
-**another shell**
-```sh
-$ https_proxy=socks5://127.0.0.1:2080 curl https://api64.ipify.org
-104.207.152.45
-```
-thats great! the `104.207.152.45` is your proxy ip
 
 ### Android project `tohdroid` act as ToH client
 see project [tohdroid](https://github.com/rkonfj/tohdroid) for details
