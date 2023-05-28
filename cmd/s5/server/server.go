@@ -55,12 +55,15 @@ type S5Server struct {
 }
 
 type Server struct {
-	name       string
-	client     *client.TohClient
-	httpClient *http.Client
-	ruleset    *ruleset.Ruleset
-	latency    time.Duration
-	limit      *api.Stats
+	name        string
+	client      *client.TohClient
+	httpIPv4    *http.Client
+	httpIPv6    *http.Client
+	httpClient  *http.Client
+	ruleset     *ruleset.Ruleset
+	latency     time.Duration
+	latencyIPv6 time.Duration
+	limit       *api.Stats
 }
 
 func (s *Server) limited() bool {
@@ -71,6 +74,46 @@ func (s *Server) limited() bool {
 		return false
 	}
 	return s.limit.Status != "ok"
+}
+
+func (s *Server) ipv6Enabled() bool {
+	return s.latencyIPv6 < s.httpClient.Timeout
+}
+
+func (s *Server) ipv4Enabled() bool {
+	return s.latency < s.httpClient.Timeout
+}
+
+func (s *Server) healthcheck(url string) {
+	if strings.TrimSpace(url) == "" {
+		s.latency = time.Duration(0)
+		s.latencyIPv6 = time.Duration(0)
+		return
+	}
+	for {
+		t1 := time.Now()
+		_, errIPv4 := s.httpIPv4.Get(url)
+		if errIPv4 != nil {
+			s.latency = s.httpClient.Timeout
+		} else {
+			s.latency = time.Since(t1)
+		}
+		t2 := time.Now()
+		_, errIPv6 := s.httpIPv6.Get(url)
+		if errIPv6 != nil {
+			s.latencyIPv6 = s.httpClient.Timeout
+		} else {
+			s.latencyIPv6 = time.Since(t2)
+		}
+		time.Sleep(15 * time.Second)
+	}
+}
+
+func (s *Server) updateStats() {
+	for {
+		s.limit, _ = s.client.Stats()
+		time.Sleep(15 * time.Second)
+	}
 }
 
 type Group struct {
@@ -166,14 +209,27 @@ func (s *S5Server) loadServers() (err error) {
 		}
 
 		server := &Server{
-			name:    srv.Name,
-			client:  c,
-			latency: 5 * time.Minute,
+			name:        srv.Name,
+			client:      c,
+			latency:     5 * time.Minute,
+			latencyIPv6: 5 * time.Minute,
 			httpClient: &http.Client{
-				Timeout: 300 * time.Second,
+				Timeout:   5 * time.Minute,
+				Transport: &http.Transport{DialContext: c.DialContext},
+			},
+			httpIPv4: &http.Client{
+				Timeout: 15 * time.Second,
 				Transport: &http.Transport{
 					DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-						return c.DialTCP(ctx, addr)
+						return c.DialContext(ctx, "tcp4", addr)
+					},
+				},
+			},
+			httpIPv6: &http.Client{
+				Timeout: 15 * time.Second,
+				Transport: &http.Transport{
+					DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+						return c.DialContext(ctx, "tcp6", addr)
 					},
 				},
 			},
@@ -184,8 +240,8 @@ func (s *S5Server) loadServers() (err error) {
 				return
 			}
 		}
-		go healthcheck(server, srv.Healthcheck)
-		go updateStats(server)
+		go server.healthcheck(srv.Healthcheck)
+		go server.updateStats()
 		s.servers = append(s.servers, server)
 	}
 	return
@@ -262,7 +318,7 @@ func (s *S5Server) dial(ctx context.Context, addr, network string) (
 		if proxy.reverseResolutionHost != nil {
 			access = fmt.Sprintf("%s:%s", *proxy.reverseResolutionHost, port)
 		}
-		log.Infof("%s using %s latency %s", access, proxy.id(), proxy.server.latency)
+		log.Infof("%s using %s", access, proxy.id())
 		conn, err = proxy.server.client.DialContext(ctx, network, addr)
 		return
 	}
@@ -291,13 +347,29 @@ func (s *S5Server) dnsExchange(dnServer string, clientAddr string, r *dns.Msg) (
 	}
 	log := logrus.WithField(spec.AppAddr.String(), clientAddr).WithField("net", "dns")
 	if proxy.ok() {
+		defer log.Infof("%s%s using %s", r.Question[0].Name,
+			dns.Type(r.Question[0].Qtype).String(), proxy.id())
+		if r.Question[0].Qtype == dns.TypeAAAA {
+			if !proxy.server.ipv6Enabled() {
+				resp = &dns.Msg{}
+				resp.Question = r.Question
+				resp.SetReply(&dns.Msg{})
+				return
+			}
+		}
+		if r.Question[0].Qtype == dns.TypeA {
+			if !proxy.server.ipv4Enabled() {
+				resp = &dns.Msg{}
+				resp.Question = r.Question
+				resp.SetReply(&dns.Msg{})
+				return
+			}
+		}
 		resp, proxy.err = proxy.server.client.DNSExchange(dnServer, r)
 		if proxy.err != nil {
 			err = proxy.err
 			return
 		}
-		log.Infof("%s%s using %s latency %s",
-			r.Question[0].Name, dns.Type(r.Question[0].Qtype).String(), proxy.id(), proxy.server.latency)
 		return
 	}
 	log.Infof("%s%s using direct", r.Question[0].Name, dns.Type(r.Question[0].Qtype).String())
@@ -364,7 +436,10 @@ func selectServer(servers []*Server) *Server {
 		s = append(s, server)
 	}
 	sort.Slice(s, func(i, j int) bool {
-		return s[i].latency < s[j].latency
+		if s[i].latencyIPv6 == s[j].latencyIPv6 {
+			return s[i].latency < s[j].latency
+		}
+		return s[i].latencyIPv6 < s[j].latencyIPv6
 	})
 	if len(s) == 0 {
 		return servers[0]

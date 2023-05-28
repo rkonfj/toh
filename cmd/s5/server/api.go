@@ -10,9 +10,14 @@ import (
 )
 
 type ServerInfo struct {
-	Name    string        `json:"name"`
-	Latency time.Duration `json:"latency"`
-	Limit   *api.Stats    `json:"limit"`
+	Name    string     `json:"name"`
+	Latency *Latency   `json:"latency"`
+	Limit   *api.Stats `json:"limit"`
+}
+
+type Latency struct {
+	IPv4 time.Duration `json:"ipv4"`
+	IPv6 time.Duration `json:"ipv6"`
 }
 
 type GroupInfo struct {
@@ -31,7 +36,7 @@ func (s *S5Server) listServers(w http.ResponseWriter, r *http.Request) {
 	for _, ser := range s.servers {
 		servers = append(servers, ServerInfo{
 			Name:    ser.name,
-			Latency: ser.latency,
+			Latency: &Latency{IPv4: ser.latency, IPv6: ser.latencyIPv6},
 			Limit:   ser.limit,
 		})
 	}
@@ -51,7 +56,7 @@ func (s *S5Server) listGroups(w http.ResponseWriter, r *http.Request) {
 		for _, ser := range s {
 			servers = append(servers, ServerInfo{
 				Name:    ser.name,
-				Latency: ser.latency,
+				Latency: &Latency{IPv4: ser.latency, IPv6: ser.latencyIPv6},
 				Limit:   ser.limit,
 			})
 		}
@@ -79,7 +84,7 @@ func (s *S5Server) outbound(w http.ResponseWriter, r *http.Request) {
 	} else if selected.server != nil {
 		outbound.Server = ServerInfo{
 			Name:    selected.server.name,
-			Latency: selected.server.latency,
+			Latency: &Latency{IPv4: selected.server.latency, IPv6: selected.server.latencyIPv6},
 			Limit:   selected.server.limit,
 		}
 	}
