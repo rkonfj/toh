@@ -218,6 +218,5 @@ func (s *S5Server) selectDNSProxyServer(host string) (proxy selected) {
 			return
 		}
 	}
-	proxy.server = selectServer(s.servers)
 	return
 }
