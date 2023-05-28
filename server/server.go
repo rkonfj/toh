@@ -82,6 +82,8 @@ func (s TohServer) HandleUpgradeWebSocket(w http.ResponseWriter, r *http.Request
 	netConn, err := dialer.DialContext(context.Background(), network, addr)
 	if err != nil {
 		logrus.Infof("%s -> %s://%s dial error %v", clientIP, network, addr, err)
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
 		return
 	}
 	w.Header().Add(spec.HeaderEstablishAddr, netConn.RemoteAddr().String())
