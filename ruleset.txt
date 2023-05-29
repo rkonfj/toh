@@ -57,6 +57,11 @@
 .t.me
 .telegram.org
 
+! Twitter
+.twitter.com
+.twimg.com
+.cms-twdigitalassets.com
+
 ! The New York Times
 .nytimes.com
 .nyt.com
