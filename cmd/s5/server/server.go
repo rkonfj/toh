@@ -105,7 +105,7 @@ func (s *Server) healthcheck(url string) {
 		} else {
 			s.latencyIPv6 = time.Since(t2)
 		}
-		time.Sleep(15 * time.Second)
+		time.Sleep(30 * time.Second)
 	}
 }
 
