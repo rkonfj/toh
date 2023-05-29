@@ -45,13 +45,14 @@ type Options struct {
 }
 
 type S5Server struct {
-	opts          Options
-	socks5Opts    socks5.Options
-	servers       []*Server
-	groups        []*Group
-	defaultDialer net.Dialer
-	geoip2db      *geoip2.Reader
-	dns           *D.LocalDNS
+	opts                       Options
+	socks5Opts                 socks5.Options
+	servers                    []*Server
+	groups                     []*Group
+	defaultDialer              net.Dialer
+	geoip2db                   *geoip2.Reader
+	dns                        *D.LocalDNS
+	localNetIPv4, localNetIPv6 bool
 }
 
 type Server struct {
@@ -186,6 +187,7 @@ func (s *S5Server) Run() error {
 	go s.openGeoip2()
 	go s.dns.Run()
 	go s.watchSignal()
+	go s.localAddrFamilyDetection()
 	return ss.Run()
 }
 
@@ -347,7 +349,7 @@ func (s *S5Server) dnsExchange(dnServer string, clientAddr string, r *dns.Msg) (
 	}
 	log := logrus.WithField(spec.AppAddr.String(), clientAddr).WithField("net", "dns")
 	if proxy.ok() {
-		defer log.Infof("%s%s using %s", r.Question[0].Name,
+		log.Infof("%s%s using %s", r.Question[0].Name,
 			dns.Type(r.Question[0].Qtype).String(), proxy.id())
 		if r.Question[0].Qtype == dns.TypeAAAA {
 			if !proxy.server.ipv6Enabled() {
@@ -373,6 +375,22 @@ func (s *S5Server) dnsExchange(dnServer string, clientAddr string, r *dns.Msg) (
 		return
 	}
 	log.Infof("%s%s using direct", r.Question[0].Name, dns.Type(r.Question[0].Qtype).String())
+	if r.Question[0].Qtype == dns.TypeAAAA {
+		if !s.localNetIPv6 {
+			resp = &dns.Msg{}
+			resp.Question = r.Question
+			resp.SetReply(&dns.Msg{})
+			return
+		}
+	}
+	if r.Question[0].Qtype == dns.TypeA {
+		if !s.localNetIPv4 {
+			resp = &dns.Msg{}
+			resp.Question = r.Question
+			resp.SetReply(&dns.Msg{})
+			return
+		}
+	}
 	return
 }
 
@@ -407,6 +425,38 @@ func (s *S5Server) watchSignal() {
 			s.reloadRuleset()
 		default:
 		}
+	}
+}
+
+func (s *S5Server) localAddrFamilyDetection() {
+	if s.opts.Cfg.Direct == nil {
+		return
+	}
+	if strings.TrimSpace(s.opts.Cfg.Direct.Healthcheck) == "" {
+		return
+	}
+	dialer := net.Dialer{}
+	httpIPv4 := http.Client{
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				return dialer.DialContext(ctx, "tcp4", addr)
+			},
+		},
+	}
+	httpIPv6 := http.Client{
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				return dialer.DialContext(ctx, "tcp6", addr)
+			},
+		},
+	}
+	url := s.opts.Cfg.Direct.Healthcheck
+	for {
+		_, errIPv4 := httpIPv4.Get(url)
+		s.localNetIPv4 = errIPv4 == nil
+		_, errIPv6 := httpIPv6.Get(url)
+		s.localNetIPv6 = errIPv6 == nil
+		time.Sleep(60 * time.Second)
 	}
 }
 

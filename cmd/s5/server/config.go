@@ -13,6 +13,8 @@ type Config struct {
 	Servers []TohServer `yaml:"servers"`
 	// group toh servers
 	Groups []ServerGroup `yaml:"groups,omitempty"`
+	// network direct access settings
+	Direct *Direct `yaml:"direct,omitempty"`
 }
 
 // Advertise since the socks5 server can listen to multiple network cards or be reverse-proxyed
@@ -32,7 +34,7 @@ type TohServer struct {
 	Key string `yaml:"key"`
 	// this server is used when the remote accessed by the user hits this ruleset
 	Ruleset []string `yaml:"ruleset,omitempty"`
-	// url that responds to any http status code
+	// url that responds to any http status code. dual stack IP should be supported
 	Healthcheck string `yaml:"healthcheck,omitempty"`
 	// the interval send ping to the under websocket conn for keepalive
 	Keepalive string `yaml:"keepalive,omitempty"`
@@ -47,4 +49,9 @@ type ServerGroup struct {
 	Servers []string `yaml:"servers"`
 	// same as `servers` section
 	Ruleset []string `yaml:"ruleset"`
+}
+
+type Direct struct {
+	// url that responds to any http status code. dual stack IP should be supported
+	Healthcheck string `yaml:"healthcheck,omitempty"`
 }
