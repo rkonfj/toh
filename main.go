@@ -17,7 +17,7 @@ func main() {
 	cmd := &cobra.Command{
 		Use:               "toh",
 		Version:           fmt.Sprintf("%s, commit %s", spec.Version, spec.Commit),
-		Short:             "A tcp over http/ws toolset",
+		Short:             "A tcp/udp over http/websocket toolset",
 		PersistentPreRunE: initAction,
 	}
 
