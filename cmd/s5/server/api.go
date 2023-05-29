@@ -31,7 +31,16 @@ type OutboundInfo struct {
 	Error  string     `json:"error"`
 }
 
-func (s *S5Server) listServers(w http.ResponseWriter, r *http.Request) {
+type LocalNetInfo struct {
+	IPv6 bool `json:"ipv6"`
+	IPv4 bool `json:"ipv4"`
+}
+
+func (s *S5Server) handleLocalNet(w http.ResponseWriter, r *http.Request) {
+	json.NewEncoder(w).Encode(LocalNetInfo{IPv6: s.localNetIPv6, IPv4: s.localNetIPv4})
+}
+
+func (s *S5Server) handleListServers(w http.ResponseWriter, r *http.Request) {
 	servers := make([]ServerInfo, 0)
 	for _, ser := range s.servers {
 		servers = append(servers, ServerInfo{
@@ -43,7 +52,7 @@ func (s *S5Server) listServers(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(servers)
 }
 
-func (s *S5Server) listGroups(w http.ResponseWriter, r *http.Request) {
+func (s *S5Server) handleListGroups(w http.ResponseWriter, r *http.Request) {
 	groups := make([]GroupInfo, 0)
 
 	for _, g := range s.groups {
@@ -68,7 +77,7 @@ func (s *S5Server) listGroups(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(groups)
 }
 
-func (s *S5Server) outbound(w http.ResponseWriter, r *http.Request) {
+func (s *S5Server) handleOutbound(w http.ResponseWriter, r *http.Request) {
 	host := r.URL.Query().Get("host")
 	selected := s.selectProxyServer(host)
 

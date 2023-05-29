@@ -285,9 +285,10 @@ func (s *S5Server) printRulesetStats() {
 }
 
 func (s *S5Server) registerHTTPHandlers() {
-	s.socks5Opts.HTTPHandlers["/servers"] = s.listServers
-	s.socks5Opts.HTTPHandlers["/groups"] = s.listGroups
-	s.socks5Opts.HTTPHandlers["/outbound"] = s.outbound
+	s.socks5Opts.HTTPHandlers["/localnet"] = s.handleLocalNet
+	s.socks5Opts.HTTPHandlers["/servers"] = s.handleListServers
+	s.socks5Opts.HTTPHandlers["/groups"] = s.handleListGroups
+	s.socks5Opts.HTTPHandlers["/outbound"] = s.handleOutbound
 }
 
 func (s *S5Server) dial(ctx context.Context, addr, network string) (
@@ -429,10 +430,10 @@ func (s *S5Server) watchSignal() {
 }
 
 func (s *S5Server) localAddrFamilyDetection() {
-	if s.opts.Cfg.Direct == nil {
+	if s.opts.Cfg.LocalNet == nil {
 		return
 	}
-	if strings.TrimSpace(s.opts.Cfg.Direct.Healthcheck) == "" {
+	if strings.TrimSpace(s.opts.Cfg.LocalNet.AddrFamilyDetectURL) == "" {
 		return
 	}
 	dialer := net.Dialer{}
@@ -450,13 +451,13 @@ func (s *S5Server) localAddrFamilyDetection() {
 			},
 		},
 	}
-	url := s.opts.Cfg.Direct.Healthcheck
+	url := s.opts.Cfg.LocalNet.AddrFamilyDetectURL
 	for {
 		_, errIPv4 := httpIPv4.Get(url)
 		s.localNetIPv4 = errIPv4 == nil
 		_, errIPv6 := httpIPv6.Get(url)
 		s.localNetIPv6 = errIPv6 == nil
-		time.Sleep(60 * time.Second)
+		time.Sleep(30 * time.Second)
 	}
 }
 

@@ -13,8 +13,8 @@ type Config struct {
 	Servers []TohServer `yaml:"servers"`
 	// group toh servers
 	Groups []ServerGroup `yaml:"groups,omitempty"`
-	// network direct access settings
-	Direct *Direct `yaml:"direct,omitempty"`
+	// local network settings
+	LocalNet *LocalNet `yaml:"localnet,omitempty"`
 }
 
 // Advertise since the socks5 server can listen to multiple network cards or be reverse-proxyed
@@ -51,7 +51,7 @@ type ServerGroup struct {
 	Ruleset []string `yaml:"ruleset"`
 }
 
-type Direct struct {
+type LocalNet struct {
 	// url that responds to any http status code. dual stack IP should be supported
-	Healthcheck string `yaml:"healthcheck,omitempty"`
+	AddrFamilyDetectURL string `yaml:"afdetect,omitempty"`
 }

@@ -137,5 +137,8 @@ func defaultOptions() *server.Config {
 			Ruleset:     []string{"https://raw.githubusercontent.com/rkonfj/toh/main/ruleset.txt"},
 			Healthcheck: "https://www.google.com/generate_204",
 		}},
+		LocalNet: &server.LocalNet{
+			AddrFamilyDetectURL: "https://204.ustclug.org",
+		},
 	}
 }
