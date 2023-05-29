@@ -1,10 +1,23 @@
 package server
 
-import "net/http"
+import (
+	"net/http"
+)
+
+var (
+	DefaultAddrFamilyDetectURL = []string{
+		"http://detectportal.firefox.com/success.txt",
+		"http://204.ustclug.org",
+	}
+	DefaultServerHealthcheck = []string{
+		"http://www.google.com/generate_204",
+		"http://maps.google.com/generate_204",
+	}
+)
 
 type Config struct {
 	// maxmind geoip2 db path
-	Geoip2 string `yaml:"geoip2"`
+	Geoip2 string `yaml:"geoip2,omitempty"`
 	// socks5+http proxy server listen addr
 	Listen string `yaml:"listen"`
 	// advertised server addr
@@ -54,4 +67,24 @@ type ServerGroup struct {
 type LocalNet struct {
 	// url that responds to any http status code. dual stack IP should be supported
 	AddrFamilyDetectURL []string `yaml:"afdetect,omitempty"`
+}
+
+func (c *Config) applyDefaults() {
+	if len(c.Geoip2) == 0 {
+		c.Geoip2 = "country.mmdb"
+	}
+
+	for _, server := range c.Servers {
+		if len(server.Healthcheck) == 0 {
+			server.Healthcheck = DefaultServerHealthcheck
+		}
+	}
+
+	if c.LocalNet == nil {
+		c.LocalNet = &LocalNet{}
+	}
+
+	if len(c.LocalNet.AddrFamilyDetectURL) == 0 {
+		c.LocalNet.AddrFamilyDetectURL = DefaultAddrFamilyDetectURL
+	}
 }

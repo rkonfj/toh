@@ -139,6 +139,7 @@ func (g *Group) selectServer() *Server {
 }
 
 func NewS5Server(opts Options) (s5Server *S5Server, err error) {
+	opts.Cfg.applyDefaults()
 	s5Server = &S5Server{
 		opts:          opts,
 		servers:       []*Server{},
@@ -161,6 +162,7 @@ func NewS5Server(opts Options) (s5Server *S5Server, err error) {
 		s5Server.socks5Opts.AdvertisePort = opts.Cfg.Advertise.Port
 	}
 
+	// overwrite config from command line flag
 	if len(opts.Listen) > 0 {
 		s5Server.socks5Opts.Listen = opts.Listen
 	}

@@ -22,7 +22,7 @@ func init() {
 		RunE:  startAction,
 	}
 	Cmd.Flags().StringP("config", "c", "", "config file (default is $HOME/.config/toh/socks5.yml)")
-	Cmd.Flags().StringP("listen", "l", "", "socks5+http listen address (specify this to override from config)")
+	Cmd.Flags().StringP("listen", "l", "", "socks5+http listen address (specify this to override config file)")
 	Cmd.Flags().String("dns", "", "local dns upstream (leave blank to disable local dns)")
 	Cmd.Flags().String("dns-listen", "127.0.0.1:2053", "local dns listen address")
 	Cmd.Flags().String("dns-evict", "2h", "local dns cache evict duration")
@@ -128,23 +128,12 @@ func processOptions(cmd *cobra.Command) (opts server.Options, err error) {
 
 func defaultOptions() *server.Config {
 	return &server.Config{
-		Geoip2: "country.mmdb",
 		Listen: "127.0.0.1:2080",
 		Servers: []server.TohServer{{
 			Name:    "us1",
 			Addr:    "https://fill-in-your-server-here.toh.sh/ws",
 			Key:     "5868a941-3025-4c6d-ad3a-41e29bb42e5f",
 			Ruleset: []string{"https://raw.githubusercontent.com/rkonfj/toh/main/ruleset.txt"},
-			Healthcheck: []string{
-				"http://www.google.com/generate_204",
-				"http://maps.google.com/generate_204",
-			},
 		}},
-		LocalNet: &server.LocalNet{
-			AddrFamilyDetectURL: []string{
-				"http://detectportal.firefox.com/success.txt",
-				"http://204.ustclug.org",
-			},
-		},
 	}
 }
