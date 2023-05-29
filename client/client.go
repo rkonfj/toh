@@ -17,6 +17,7 @@ import (
 	"github.com/gobwas/ws"
 	"github.com/gobwas/ws/wsutil"
 	"github.com/miekg/dns"
+	D "github.com/rkonfj/toh/dns"
 	"github.com/rkonfj/toh/server/api"
 	"github.com/rkonfj/toh/spec"
 	"github.com/sirupsen/logrus"
@@ -30,6 +31,7 @@ type TohClient struct {
 	serverIPs       []net.IP
 	serverPort      string
 	dnsClient       *dns.Client
+	resolver        *D.Resolver
 }
 
 type Options struct {
@@ -47,6 +49,8 @@ func NewTohClient(options Options) (*TohClient, error) {
 		dnsClient:       &dns.Client{},
 		connIdleTimeout: 75 * time.Second,
 	}
+	dialer := net.Dialer{}
+	c.resolver = &D.Resolver{Servers: D.DefaultResolver.Servers, Exchange: c.dnsExchange}
 	c.netDial = func(ctx context.Context, network, addr string) (conn net.Conn, err error) {
 		if len(c.serverIPs) == 0 {
 			var host string
@@ -54,16 +58,16 @@ func NewTohClient(options Options) (*TohClient, error) {
 			if err != nil {
 				return
 			}
-			c.serverIPs, err = c.directLookupIP(host, dns.TypeA)
+			c.serverIPs, err = D.LookupIP4(host)
 			if err == spec.ErrDNSTypeANotFound {
-				c.serverIPs, err = c.directLookupIP(host, dns.TypeAAAA)
+				c.serverIPs, err = D.LookupIP6(host)
 			}
 			if err != nil {
 				err = spec.ErrDNSRecordNotFound
 				return
 			}
 		}
-		return (&net.Dialer{}).DialContext(ctx, network,
+		return dialer.DialContext(ctx, network,
 			net.JoinHostPort(c.serverIPs[rand.Intn(len(c.serverIPs))].String(), c.serverPort))
 	}
 	c.httpClient = &http.Client{
@@ -75,7 +79,7 @@ func NewTohClient(options Options) (*TohClient, error) {
 }
 
 func (c *TohClient) DNSExchange(dnServer string, query *dns.Msg) (resp *dns.Msg, err error) {
-	return c.dnsExchange(dnServer, query, false)
+	return c.dnsExchange(dnServer, query)
 }
 
 // LookupIP lookup ipv4 and ipv6
@@ -91,7 +95,7 @@ func (c *TohClient) LookupIP(host string) (ips []net.IP, err error) {
 			ip6 = append(ip6, _ips...)
 		}
 	}()
-	_ips, e4 := c.lookupIP(host, dns.TypeA, false)
+	_ips, e4 := c.LookupIP4(host)
 	if e4 == nil {
 		ips = append(ips, _ips...)
 	}
@@ -105,12 +109,12 @@ func (c *TohClient) LookupIP(host string) (ips []net.IP, err error) {
 
 // LookupIP4 lookup only ipv4
 func (c *TohClient) LookupIP4(host string) (ips []net.IP, err error) {
-	return c.lookupIP(host, dns.TypeA, false)
+	return c.resolver.LookupIP(host, dns.TypeA)
 }
 
 // LookupIP4 lookup only ipv6
 func (c *TohClient) LookupIP6(host string) (ips []net.IP, err error) {
-	return c.lookupIP(host, dns.TypeAAAA, false)
+	return c.resolver.LookupIP(host, dns.TypeAAAA)
 }
 
 func (c *TohClient) DialTCP(ctx context.Context, addr string) (net.Conn, error) {
@@ -161,64 +165,17 @@ func (c *TohClient) Stats() (s *api.Stats, err error) {
 	return
 }
 
-func (c *TohClient) dnsExchange(dnServer string, query *dns.Msg, direct bool) (resp *dns.Msg, err error) {
+func (c *TohClient) dnsExchange(dnServer string, query *dns.Msg) (resp *dns.Msg, err error) {
 	dnsLookupCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
-	if direct {
-		resp, _, err = c.dnsClient.ExchangeContext(dnsLookupCtx, query, dnServer)
-	} else {
-		conn, _err := c.DialUDP(dnsLookupCtx, dnServer)
-		if _err != nil {
-			err = fmt.Errorf("dial error: %s", _err.Error())
-			return
-		}
-
-		defer conn.Close()
-		resp, _, err = c.dnsClient.ExchangeWithConn(query, &dns.Conn{Conn: &spec.PacketConnWrapper{Conn: conn}})
-	}
-	return
-}
-
-func (c *TohClient) lookupIP(host string, t uint16, direct bool) (ips []net.IP, err error) {
-	ip := net.ParseIP(host)
-	if ip != nil {
-		ips = append(ips, ip)
+	conn, _err := c.DialUDP(dnsLookupCtx, dnServer)
+	if _err != nil {
+		err = fmt.Errorf("dial error: %s", _err.Error())
 		return
 	}
-	query := &dns.Msg{}
-	query.SetQuestion(dns.Fqdn(host), t)
-	var resp *dns.Msg
-	for _, dnServer := range []string{"8.8.8.8:53", "223.5.5.5:53"} {
-		resp, err = c.dnsExchange(dnServer, query, direct)
-		if err == nil {
-			break
-		}
-	}
-	if err != nil {
-		return
-	}
-	for _, a := range resp.Answer {
-		if a.Header().Rrtype == dns.TypeA {
-			ips = append(ips, a.(*dns.A).A)
-		}
-		if a.Header().Rrtype == dns.TypeAAAA {
-			ips = append(ips, a.(*dns.AAAA).AAAA)
-		}
-	}
-	if len(ips) == 0 {
-		if t == dns.TypeA {
-			err = spec.ErrDNSTypeANotFound
-		} else if t == dns.TypeAAAA {
-			err = spec.ErrDNSTypeAAAANotFound
-		} else {
-			err = fmt.Errorf("resolve %s : no type %s was found", host, dns.Type(t))
-		}
-	}
+	defer conn.Close()
+	resp, _, err = c.dnsClient.ExchangeWithConn(query, &dns.Conn{Conn: &spec.PacketConnWrapper{Conn: conn}})
 	return
-}
-
-func (c *TohClient) directLookupIP(host string, t uint16) (ips []net.IP, err error) {
-	return c.lookupIP(host, t, true)
 }
 
 func (c *TohClient) dial(ctx context.Context, network, addr string) (

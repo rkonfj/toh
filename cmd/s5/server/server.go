@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"net"
 	"net/http"
 	"os"
@@ -444,6 +445,23 @@ func (s *S5Server) watchSignal() {
 	}
 }
 
+func (s *S5Server) reloadRuleset() {
+	for _, g := range s.groups {
+		err := g.ruleset.Reload()
+		if err != nil {
+			logrus.Error(err)
+		}
+	}
+	for _, s := range s.servers {
+		err := s.ruleset.Reload()
+		if err != nil {
+			logrus.Error(err)
+		}
+	}
+	ruleset.ResetCache()
+	s.printRulesetStats()
+}
+
 func (s *S5Server) localAddrFamilyDetection() {
 	if s.opts.Cfg.LocalNet == nil {
 		return
@@ -451,23 +469,9 @@ func (s *S5Server) localAddrFamilyDetection() {
 	if len(s.opts.Cfg.LocalNet.AddrFamilyDetectURL) == 0 {
 		return
 	}
-	dialer := net.Dialer{}
-	httpIPv4 := http.Client{
-		Timeout: 6 * time.Second,
-		Transport: &http.Transport{
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				return dialer.DialContext(ctx, "tcp4", addr)
-			},
-		},
-	}
-	httpIPv6 := http.Client{
-		Timeout: 6 * time.Second,
-		Transport: &http.Transport{
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				return dialer.DialContext(ctx, "tcp6", addr)
-			},
-		},
-	}
+
+	httpIPv4 := newHTTPClient(D.LookupIP4)
+	httpIPv6 := newHTTPClient(D.LookupIP6)
 
 	for {
 		var err error
@@ -497,21 +501,25 @@ func (s *S5Server) localAddrFamilyDetection() {
 	}
 }
 
-func (s *S5Server) reloadRuleset() {
-	for _, g := range s.groups {
-		err := g.ruleset.Reload()
-		if err != nil {
-			logrus.Error(err)
-		}
+func newHTTPClient(lookupIP func(host string) (ips []net.IP, err error)) *http.Client {
+	dialer := net.Dialer{}
+	return &http.Client{
+		Timeout: 6 * time.Second,
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (c net.Conn, err error) {
+				host, port, err := net.SplitHostPort(addr)
+				if err != nil {
+					return
+				}
+				ips, err := lookupIP(host)
+				if err != nil {
+					return
+				}
+				return dialer.DialContext(ctx, network,
+					net.JoinHostPort(ips[rand.Intn(len(ips))].String(), port))
+			},
+		},
 	}
-	for _, s := range s.servers {
-		err := s.ruleset.Reload()
-		if err != nil {
-			logrus.Error(err)
-		}
-	}
-	ruleset.ResetCache()
-	s.printRulesetStats()
 }
 
 func selectServer(servers []*Server) *Server {
