@@ -131,14 +131,20 @@ func defaultOptions() *server.Config {
 		Geoip2: "country.mmdb",
 		Listen: "127.0.0.1:2080",
 		Servers: []server.TohServer{{
-			Name:        "us1",
-			Addr:        "https://fill-in-your-server-here.toh.sh/ws",
-			Key:         "5868a941-3025-4c6d-ad3a-41e29bb42e5f",
-			Ruleset:     []string{"https://raw.githubusercontent.com/rkonfj/toh/main/ruleset.txt"},
-			Healthcheck: "https://www.google.com/generate_204",
+			Name:    "us1",
+			Addr:    "https://fill-in-your-server-here.toh.sh/ws",
+			Key:     "5868a941-3025-4c6d-ad3a-41e29bb42e5f",
+			Ruleset: []string{"https://raw.githubusercontent.com/rkonfj/toh/main/ruleset.txt"},
+			Healthcheck: []string{
+				"http://www.google.com/generate_204",
+				"http://maps.google.com/generate_204",
+			},
 		}},
 		LocalNet: &server.LocalNet{
-			AddrFamilyDetectURL: "https://204.ustclug.org",
+			AddrFamilyDetectURL: []string{
+				"http://detectportal.firefox.com/success.txt",
+				"http://204.ustclug.org",
+			},
 		},
 	}
 }

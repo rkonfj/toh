@@ -85,27 +85,38 @@ func (s *Server) ipv4Enabled() bool {
 	return s.latency < s.httpClient.Timeout
 }
 
-func (s *Server) healthcheck(url string) {
-	if strings.TrimSpace(url) == "" {
+func (s *Server) healthcheck(urls []string) {
+	if len(urls) == 0 {
 		s.latency = time.Duration(0)
 		s.latencyIPv6 = time.Duration(0)
 		return
 	}
 	for {
-		t1 := time.Now()
-		_, errIPv4 := s.httpIPv4.Get(url)
+		var errIPv4, errIPv6 error
+		for _, url := range urls {
+			t1 := time.Now()
+			_, errIPv4 = s.httpIPv4.Get(url)
+			if errIPv4 == nil {
+				s.latency = time.Since(t1)
+				break
+			}
+		}
 		if errIPv4 != nil {
 			s.latency = s.httpClient.Timeout
-		} else {
-			s.latency = time.Since(t1)
 		}
-		t2 := time.Now()
-		_, errIPv6 := s.httpIPv6.Get(url)
+
+		for _, url := range urls {
+			t2 := time.Now()
+			_, errIPv6 = s.httpIPv6.Get(url)
+			if errIPv6 == nil {
+				s.latencyIPv6 = time.Since(t2)
+				break
+			}
+		}
 		if errIPv6 != nil {
 			s.latencyIPv6 = s.httpClient.Timeout
-		} else {
-			s.latencyIPv6 = time.Since(t2)
 		}
+
 		time.Sleep(30 * time.Second)
 	}
 }
@@ -222,7 +233,7 @@ func (s *S5Server) loadServers() (err error) {
 				Transport: &http.Transport{DialContext: c.DialContext},
 			},
 			httpIPv4: &http.Client{
-				Timeout: 15 * time.Second,
+				Timeout: 6 * time.Second,
 				Transport: &http.Transport{
 					DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 						return c.DialContext(ctx, "tcp4", addr)
@@ -230,7 +241,7 @@ func (s *S5Server) loadServers() (err error) {
 				},
 			},
 			httpIPv6: &http.Client{
-				Timeout: 15 * time.Second,
+				Timeout: 6 * time.Second,
 				Transport: &http.Transport{
 					DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 						return c.DialContext(ctx, "tcp6", addr)
@@ -435,11 +446,12 @@ func (s *S5Server) localAddrFamilyDetection() {
 	if s.opts.Cfg.LocalNet == nil {
 		return
 	}
-	if strings.TrimSpace(s.opts.Cfg.LocalNet.AddrFamilyDetectURL) == "" {
+	if len(s.opts.Cfg.LocalNet.AddrFamilyDetectURL) == 0 {
 		return
 	}
 	dialer := net.Dialer{}
 	httpIPv4 := http.Client{
+		Timeout: 6 * time.Second,
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 				return dialer.DialContext(ctx, "tcp4", addr)
@@ -447,18 +459,38 @@ func (s *S5Server) localAddrFamilyDetection() {
 		},
 	}
 	httpIPv6 := http.Client{
+		Timeout: 6 * time.Second,
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 				return dialer.DialContext(ctx, "tcp6", addr)
 			},
 		},
 	}
-	url := s.opts.Cfg.LocalNet.AddrFamilyDetectURL
+
 	for {
-		_, errIPv4 := httpIPv4.Get(url)
-		s.localNetIPv4 = errIPv4 == nil
-		_, errIPv6 := httpIPv6.Get(url)
-		s.localNetIPv6 = errIPv6 == nil
+		var err error
+		for _, url := range s.opts.Cfg.LocalNet.AddrFamilyDetectURL {
+			_, err = httpIPv4.Get(url)
+			if err == nil {
+				s.localNetIPv4 = true
+				break
+			}
+		}
+		if err != nil {
+			s.localNetIPv4 = false
+		}
+
+		for _, url := range s.opts.Cfg.LocalNet.AddrFamilyDetectURL {
+			_, err = httpIPv6.Get(url)
+			if err == nil {
+				s.localNetIPv6 = true
+				break
+			}
+		}
+		if err != nil {
+			s.localNetIPv6 = false
+		}
+
 		time.Sleep(30 * time.Second)
 	}
 }

@@ -35,7 +35,7 @@ type TohServer struct {
 	// this server is used when the remote accessed by the user hits this ruleset
 	Ruleset []string `yaml:"ruleset,omitempty"`
 	// url that responds to any http status code. dual stack IP should be supported
-	Healthcheck string `yaml:"healthcheck,omitempty"`
+	Healthcheck []string `yaml:"healthcheck,omitempty"`
 	// the interval send ping to the under websocket conn for keepalive
 	Keepalive string `yaml:"keepalive,omitempty"`
 	// customize the request header sent to the toh server
@@ -53,5 +53,5 @@ type ServerGroup struct {
 
 type LocalNet struct {
 	// url that responds to any http status code. dual stack IP should be supported
-	AddrFamilyDetectURL string `yaml:"afdetect,omitempty"`
+	AddrFamilyDetectURL []string `yaml:"afdetect,omitempty"`
 }
