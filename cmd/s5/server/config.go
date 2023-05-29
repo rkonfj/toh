@@ -23,9 +23,9 @@ type Config struct {
 	// advertised server addr
 	Advertise *Advertise `yaml:"advertise,omitempty"`
 	// toh server list
-	Servers []TohServer `yaml:"servers"`
+	Servers []*TohServer `yaml:"servers"`
 	// group toh servers
-	Groups []ServerGroup `yaml:"groups,omitempty"`
+	Groups []*ServerGroup `yaml:"groups,omitempty"`
 	// local network settings
 	LocalNet *LocalNet `yaml:"localnet,omitempty"`
 }

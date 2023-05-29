@@ -129,7 +129,7 @@ func processOptions(cmd *cobra.Command) (opts server.Options, err error) {
 func defaultOptions() *server.Config {
 	return &server.Config{
 		Listen: "127.0.0.1:2080",
-		Servers: []server.TohServer{{
+		Servers: []*server.TohServer{{
 			Name:    "us1",
 			Addr:    "https://fill-in-your-server-here.toh.sh/ws",
 			Key:     "5868a941-3025-4c6d-ad3a-41e29bb42e5f",
