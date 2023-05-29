@@ -138,27 +138,27 @@ func (rs *Ruleset) LoadFromReader(reader bufio.Reader) error {
 			continue
 		}
 		if r, ok := strings.CutPrefix(l, "if-ip:direct,"); ok {
-			rs.ifIPDirectCountrySet = append(rs.ifIPDirectCountrySet, trim(r))
+			rs.ifIPDirectCountrySet = append(rs.ifIPDirectCountrySet, strings.TrimSpace(r))
 			continue
 		}
 		if r, ok := strings.CutPrefix(l, "if-ip:proxy,"); ok {
-			rs.ifIPProxyCountrySet = append(rs.ifIPProxyCountrySet, trim(r))
+			rs.ifIPProxyCountrySet = append(rs.ifIPProxyCountrySet, strings.TrimSpace(r))
 			continue
 		}
 		if r, ok := strings.CutPrefix(l, "ip:direct,"); ok {
-			rs.directCountrySet = append(rs.directCountrySet, trim(r))
+			rs.directCountrySet = append(rs.directCountrySet, strings.TrimSpace(r))
 			continue
 		}
 		if r, ok := strings.CutPrefix(l, "ip:proxy,"); ok {
-			rs.proxyCountrySet = append(rs.proxyCountrySet, trim(r))
+			rs.proxyCountrySet = append(rs.proxyCountrySet, strings.TrimSpace(r))
 			continue
 		}
 		if r, ok := strings.CutPrefix(l, "||"); ok {
-			rs.specialSet = append(rs.specialSet, trim(r))
+			rs.specialSet = append(rs.specialSet, strings.TrimSpace(r))
 			continue
 		}
 		if r, ok := strings.CutPrefix(l, "@@"); ok {
-			rs.directSet = append(rs.directSet, trim(r))
+			rs.directSet = append(rs.directSet, strings.TrimSpace(r))
 			continue
 		}
 		if _, ok := strings.CutPrefix(l, "|"); ok {
@@ -167,7 +167,7 @@ func (rs *Ruleset) LoadFromReader(reader bufio.Reader) error {
 		if _, ok := strings.CutPrefix(l, "!"); ok {
 			continue
 		}
-		rs.wildcardSet = append(rs.wildcardSet, trim(l))
+		rs.wildcardSet = append(rs.wildcardSet, strings.TrimSpace(l))
 	}
 	return nil
 }
@@ -272,10 +272,6 @@ func (rs *Ruleset) openFile(ruleLocation string) (reader io.ReadCloser, err erro
 		return
 	}
 	return
-}
-
-func trim(s string) string {
-	return strings.Trim(strings.Trim(s, "\n"), " ")
 }
 
 func readFromURL(dial func(ctx context.Context, network, addr string) (net.Conn, error), url string) ([]byte, error) {
