@@ -133,6 +133,8 @@ func NewS5Server(opts Options) (s5Server *S5Server, err error) {
 		servers:       []*Server{},
 		groups:        []*Group{},
 		defaultDialer: net.Dialer{},
+		localNetIPv4:  true,
+		localNetIPv6:  true,
 	}
 
 	s5Server.socks5Opts = socks5.Options{
