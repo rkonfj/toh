@@ -62,6 +62,10 @@
 .twimg.com
 .cms-twdigitalassets.com
 
+! Instagram
+.instagram.com
+.cdninstagram.com
+
 ! The New York Times
 .nytimes.com
 .nyt.com
@@ -75,3 +79,4 @@
 .netflix.com
 .grafana.com
 .jsdelivr.net
+.ipify.org
