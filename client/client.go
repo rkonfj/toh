@@ -266,15 +266,12 @@ func (c *TohClient) dialWS(ctx context.Context, urlstr string, header http.Heade
 		u.Scheme = "wss"
 	}
 	conn, _, _, err := dialer.Dial(context.Background(), u.String())
-	if err != nil {
-		return
-	}
 	if statusCode == http.StatusUnauthorized {
 		err = spec.ErrAuth
 		return
 	}
-	if statusCode > 0 {
-		err = errors.New(http.StatusText(statusCode))
+	if err != nil {
+		err = fmt.Errorf("dial %s: %s", u, err)
 		return
 	}
 	wsc = &wsConn{

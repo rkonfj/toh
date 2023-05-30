@@ -23,7 +23,7 @@ func (c LogField) String() string {
 }
 
 var (
-	ErrAuth                = errors.New("unauthorized, invalid ToH key")
+	ErrAuth                = errors.New("authentication failed! invalid/limited ToH key")
 	ErrDNSTypeANotFound    = errors.New("type A record not found")
 	ErrDNSTypeAAAANotFound = errors.New("type AAAA record not found")
 	ErrDNSRecordNotFound   = errors.New("dns record not found")
