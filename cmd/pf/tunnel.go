@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -17,16 +18,19 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-var errOnlyOnceMapToStdio error = errors.New(
-	"only one communication target can be mapped to stdio")
+var errOnlyOnceMapToStdio error = errors.
+	New("only one communication target can be mapped to stdio")
 
 type Options struct {
+	// required
 	Forwards    []string
 	Server, Key string
-	UDPBuf      int64
-	TCPBuf      int64
-	Keepalive   time.Duration
-	Headers     []string
+
+	// optional (since they all have default values)
+	UDPBuf    int64
+	TCPBuf    int64
+	Keepalive time.Duration
+	Headers   []string
 }
 
 type TunnelManager struct {
@@ -44,6 +48,8 @@ type mapping struct {
 }
 
 func NewTunnelManager(opts Options) (*TunnelManager, error) {
+	opts.TCPBuf = int64(math.Max(float64(opts.TCPBuf), 2*1024))
+	opts.UDPBuf = int64(math.Max(float64(opts.UDPBuf), 1500-28))
 	clientOpts := client.Options{
 		Server:    opts.Server,
 		Key:       opts.Key,
