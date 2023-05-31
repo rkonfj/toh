@@ -23,12 +23,12 @@ time="2023-04-26T21:49:33+08:00" level=info msg="initializing acl file acl.json"
     "keys": [
         {
             "name": "default",
-            "key": "5868a941-3025-4c6d-ad3a-41e29bb42e5f"
+            "key": "5CCQAoN905PdIejsal55Am3z2mXY6ueLrtdSA8OCpVc"
         }
     ]
 }
 time="2023-04-26T21:49:33+08:00" level=info msg="acl: load 1 keys"
-time="2023-04-26T21:49:33+08:00" level=info msg="server listen on localhost:9986 now"
+time="2023-04-26T21:49:33+08:00" level=info msg="server listen on 127.0.0.1:9986 now"
 ```
 > the `key` here will using by `pf` and `s5` commands
 
@@ -61,11 +61,12 @@ server {
 ### Port forward tool `pf` act as ToH client
 - SSH over HTTP
 ```
-$ ssh -o ProxyCommand="./toh pf -s https://fill-in-your-server-here.toh.sh/ws -k 5868a941-3025-4c6d-ad3a-41e29bb42e5f -f tcp/%h:%p" root@127.0.0.1
+$ # get a chatgpt robot
+$ ssh -o ProxyCommand="./toh pf -s https://fill-in-your-server-here.toh.sh/ws -k 5CCQAoN905PdIejsal55Am3z2mXY6ueLrtdSA8OCpVc -f tcp/%h:%p" chat@127.0.0.1
 ```
 - Common use case
 ```sh
-$ ./toh pf -s https://fill-in-your-server-here.toh.sh/ws -k 5868a941-3025-4c6d-ad3a-41e29bb42e5f -f udp/127.0.0.53:53/8.8.8.8:53 -f tcp/0.0.0.0:1080/google.com:80
+$ ./toh pf -s https://fill-in-your-server-here.toh.sh/ws -k 5CCQAoN905PdIejsal55Am3z2mXY6ueLrtdSA8OCpVc -f udp/127.0.0.53:53/8.8.8.8:53 -f tcp/0.0.0.0:1080/google.com:80
 time="2023-04-28T13:52:31+08:00" level=info msg="listen on 127.0.0.53:53 for udp://8.8.8.8:53 now"
 time="2023-04-28T13:52:31+08:00" level=info msg="listen on 0.0.0.0:1080 for tcp://google.com:80 now"
 
@@ -86,15 +87,13 @@ The document has moved
 ```sh
 $ ./toh s5
 time="2023-05-12T15:02:11Z" level=info msg="initializing config file /root/.config/toh/socks5.yml"
-geoip2: country.mmdb
 listen: localhost:2080
 servers:
   - name: us1
     api: https://fill-in-your-server-here.toh.sh/ws
-    key: 5868a941-3025-4c6d-ad3a-41e29bb42e5f
+    key: 5CCQAoN905PdIejsal55Am3z2mXY6ueLrtdSA8OCpVc
     ruleset:
       - https://raw.githubusercontent.com/rkonfj/toh/main/ruleset.txt
-    healthcheck: https://www.google.com/generate_204
 time="2023-05-12T15:02:11Z" level=info msg="downloading https://raw.githubusercontent.com/rkonfj/toh/main/ruleset.txt"
 time="2023-05-12T15:02:14Z" level=info msg="ruleset   us1: special 0, direct 0, wildcard 21"
 time="2023-05-12T15:02:14Z" level=info msg="total loaded 1 proxy servers and 0 groups"
@@ -107,6 +106,7 @@ $ https_proxy=socks5://127.0.0.1:2080 curl https://api64.ipify.org
 $ # wow, great! the `104.207.152.45` is your proxy ip
 ```
 - full configuration can be viewed [here](https://github.com/rkonfj/toh/blob/main/cmd/s5/server/config.go)  
+- socks5 support `CONNECT` and `UDP ASSOCIATE`
 - the server `us1` is the test server, will stopped in the future
 
 ### Android project `tohdroid` act as ToH client

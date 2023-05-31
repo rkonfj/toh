@@ -18,7 +18,7 @@ import (
 func main() {
 	c, err := client.NewTohClient(client.Options{
 		Server: "wss://fill-in-your-server-here.toh.sh/ws",
-		Key:    "5868a941-3025-4c6d-ad3a-41e29bb42e5f",
+		Key:    "5CCQAoN905PdIejsal55Am3z2mXY6ueLrtdSA8OCpVc",
 	})
 	if err != nil {
 		panic(err)
@@ -54,7 +54,7 @@ import (
 func main() {
 	c, err := client.NewTohClient(client.Options{
 		Server: "https://fill-in-your-server-here.toh.sh",
-		Key:    "5868a941-3025-4c6d-ad3a-41e29bb42e5f",
+		Key:    "5CCQAoN905PdIejsal55Am3z2mXY6ueLrtdSA8OCpVc",
 	})
 	if err != nil {
 		panic(err)
