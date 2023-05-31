@@ -13,9 +13,10 @@ import (
 var dnsClient *dns.Client = &dns.Client{}
 
 var DefaultResolver Resolver = Resolver{
-	Servers: []string{"8.8.8.8:53", "223.5.5.5:53"},
+	IPv4Servers: []string{"8.8.8.8:53", "223.5.5.5:53"},
+	IPv6Servers: []string{"[2001:4860:4860::8888]:53", "[2400:3200::1]:53"},
 	Exchange: func(dnServer string, r *dns.Msg) (resp *dns.Msg, err error) {
-		dnsLookupCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+		dnsLookupCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		resp, _, err = dnsClient.ExchangeContext(dnsLookupCtx, r, dnServer)
 		return
@@ -23,8 +24,9 @@ var DefaultResolver Resolver = Resolver{
 }
 
 type Resolver struct {
-	Servers  []string
-	Exchange func(dnServer string, r *dns.Msg) (*dns.Msg, error)
+	IPv4Servers []string
+	IPv6Servers []string
+	Exchange    func(dnServer string, r *dns.Msg) (*dns.Msg, error)
 }
 
 func LookupIP4(host string) (ips []net.IP, err error) {
@@ -44,7 +46,7 @@ func (r *Resolver) LookupIP(host string, t uint16) (ips []net.IP, err error) {
 	query := &dns.Msg{}
 	query.SetQuestion(dns.Fqdn(host), t)
 	var resp *dns.Msg
-	for _, dnServer := range r.Servers {
+	for _, dnServer := range append(r.IPv4Servers, r.IPv6Servers...) {
 		resp, err = r.Exchange(dnServer, query)
 		if err == nil {
 			break

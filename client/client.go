@@ -28,7 +28,8 @@ type TohClient struct {
 	connIdleTimeout time.Duration
 	netDial         func(ctx context.Context, network, addr string) (conn net.Conn, err error)
 	httpClient      *http.Client
-	serverIPs       []net.IP
+	serverIPv4s     []net.IP
+	serverIPv6s     []net.IP
 	serverPort      string
 	dnsClient       *dns.Client
 	resolver        *D.Resolver
@@ -50,25 +51,61 @@ func NewTohClient(options Options) (*TohClient, error) {
 		connIdleTimeout: 75 * time.Second,
 	}
 	dialer := net.Dialer{}
-	c.resolver = &D.Resolver{Servers: D.DefaultResolver.Servers, Exchange: c.dnsExchange}
+	c.resolver = &D.Resolver{
+		IPv4Servers: D.DefaultResolver.IPv4Servers,
+		IPv6Servers: D.DefaultResolver.IPv6Servers,
+		Exchange:    c.dnsExchange}
 	c.netDial = func(ctx context.Context, network, addr string) (conn net.Conn, err error) {
-		if len(c.serverIPs) == 0 {
+		if len(c.serverIPv6s) == 0 && len(c.serverIPv4s) == 0 {
 			var host string
 			host, c.serverPort, err = net.SplitHostPort(addr)
 			if err != nil {
 				return
 			}
-			c.serverIPs, err = D.LookupIP4(host)
-			if err == spec.ErrDNSTypeANotFound {
-				c.serverIPs, err = D.LookupIP6(host)
+			ipv4Ok := make(chan bool)
+			ipv6Ok := make(chan bool)
+			defer close(ipv4Ok)
+			defer close(ipv6Ok)
+			go func() {
+				c.serverIPv6s, err = D.LookupIP6(host)
+				if err != nil {
+					logrus.Debugf("lookup6 for %s: %s", host, err)
+					return
+				}
+				if len(c.serverIPv6s) > 0 {
+					ipv6Ok <- true
+				}
+			}()
+
+			go func() {
+				c.serverIPv4s, err = D.LookupIP4(host)
+				if err != nil {
+					logrus.Debugf("lookup4 for %s: %s", host, err)
+					return
+				}
+				if len(c.serverIPv4s) > 0 {
+					ipv4Ok <- true
+				}
+			}()
+			select {
+			case <-ipv4Ok:
+			case <-ipv6Ok:
 			}
-			if err != nil {
-				err = spec.ErrDNSRecordNotFound
+		}
+		if len(c.serverIPv6s) > 0 {
+			address := net.JoinHostPort(c.serverIPv6s[rand.Intn(len(c.serverIPv6s))].String(), c.serverPort)
+			conn, err = dialer.DialContext(ctx, network, address)
+			if err == nil {
 				return
 			}
 		}
-		return dialer.DialContext(ctx, network,
-			net.JoinHostPort(c.serverIPs[rand.Intn(len(c.serverIPs))].String(), c.serverPort))
+		if len(c.serverIPv4s) > 0 {
+			address := net.JoinHostPort(c.serverIPv4s[rand.Intn(len(c.serverIPv4s))].String(), c.serverPort)
+			conn, err = dialer.DialContext(ctx, network, address)
+			return
+		}
+		err = spec.ErrDNSRecordNotFound
+		return
 	}
 	c.httpClient = &http.Client{
 		Transport: &http.Transport{
