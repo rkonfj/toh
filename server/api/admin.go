@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 
 	"github.com/rkonfj/toh/spec"
 )
@@ -24,7 +25,8 @@ func NewServerAdminClient(server, adminKey string) *ServerAdminClient {
 }
 
 func (c *ServerAdminClient) ACLNewKey(name string) (key string, err error) {
-	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/admin/acl/key", c.server), nil)
+	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/admin/acl/key?name=%s",
+		c.server, url.QueryEscape(name)), nil)
 	if err != nil {
 		return
 	}
@@ -46,7 +48,8 @@ func (c *ServerAdminClient) ACLNewKey(name string) (key string, err error) {
 }
 
 func (c *ServerAdminClient) ACLDelKey(key string) (err error) {
-	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/admin/acl/key?key="+key, c.server), nil)
+	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/admin/acl/key?key=%s",
+		c.server, url.QueryEscape(key)), nil)
 	if err != nil {
 		return
 	}
@@ -68,7 +71,8 @@ func (c *ServerAdminClient) ACLPatchLimit(key string, l *Limit) (err error) {
 	if err != nil {
 		return
 	}
-	req, err := http.NewRequest(http.MethodPatch, fmt.Sprintf("%s/admin/acl/limit?key="+key, c.server), body)
+	req, err := http.NewRequest(http.MethodPatch, fmt.Sprintf("%s/admin/acl/limit?key=%s",
+		c.server, url.QueryEscape(key)), body)
 	if err != nil {
 		return
 	}
@@ -86,7 +90,8 @@ func (c *ServerAdminClient) ACLPatchLimit(key string, l *Limit) (err error) {
 }
 
 func (c *ServerAdminClient) ACLGetLimit(key string) (l *Limit, err error) {
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/admin/acl/limit?key="+key, c.server), nil)
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/admin/acl/limit?key=%s",
+		c.server, url.QueryEscape(key)), nil)
 	if err != nil {
 		return
 	}
@@ -106,7 +111,8 @@ func (c *ServerAdminClient) ACLGetLimit(key string) (l *Limit, err error) {
 }
 
 func (c *ServerAdminClient) ACLGetUsage(key string) (usage *BytesUsage, err error) {
-	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/admin/acl/usage?key="+key, c.server), nil)
+	req, err := http.NewRequest(http.MethodGet, fmt.Sprintf("%s/admin/acl/usage?key=%s",
+		c.server, url.QueryEscape(key)), nil)
 	if err != nil {
 		return
 	}
@@ -126,7 +132,8 @@ func (c *ServerAdminClient) ACLGetUsage(key string) (usage *BytesUsage, err erro
 }
 
 func (c *ServerAdminClient) ACLDelUsage(key string) (err error) {
-	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/admin/acl/usage?key="+key, c.server), nil)
+	req, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("%s/admin/acl/usage?key=%s",
+		c.server, url.QueryEscape(key)), nil)
 	if err != nil {
 		return
 	}
