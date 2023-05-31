@@ -86,9 +86,10 @@ func (s TohServer) HandleUpgradeWebSocket(w http.ResponseWriter, r *http.Request
 		w.Write([]byte(err.Error()))
 		return
 	}
-	w.Header().Add(spec.HeaderEstablishAddr, netConn.RemoteAddr().String())
 
-	conn, _, _, err := ws.UpgradeHTTP(r, w)
+	upgradeHeader := http.Header{}
+	upgradeHeader.Add(spec.HeaderEstablishAddr, netConn.RemoteAddr().String())
+	conn, _, _, err := ws.HTTPUpgrader{Header: upgradeHeader}.Upgrade(r, w)
 	if err != nil {
 		logrus.Error(err)
 		return
