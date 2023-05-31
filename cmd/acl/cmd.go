@@ -1,9 +1,7 @@
 package acl
 
 import (
-	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -31,7 +29,7 @@ func init() {
 		Args:  cobra.NoArgs,
 		RunE:  aclNew,
 	}
-	cmdNew.Flags().String("name", "", "the acl key name")
+	cmdNew.Flags().String("name", "", "the acl key name (default not set)")
 
 	cmdDel := &cobra.Command{
 		Use:   "del",
@@ -49,12 +47,10 @@ func init() {
 		RunE:  aclLimit,
 	}
 	cmdLimit.Flags().String("key", "", "the acl key")
-	cmdLimit.Flags().Bool("reset", false, "reset acl key limit")
-	cmdLimit.Flags().String("bytes", "", "the acl limit bytes")
-	cmdLimit.Flags().String("in-bytes", "", "the acl limit in bytes")
-	cmdLimit.Flags().String("out-bytes", "", "the acl limit out bytes")
-	cmdLimit.Flags().StringSlice("whitelist", []string{}, "the acl limit whitelist")
-	cmdLimit.Flags().StringSlice("blacklist", []string{}, "the acl limit blacklist")
+	cmdLimit.Flags().Bool("reset", false, "reset acl key limit (default false)")
+	cmdLimit.Flags().String("bytes", "", "the acl limit bytes (default not update)")
+	cmdLimit.Flags().String("in-bytes", "", "the acl limit in bytes (default not update)")
+	cmdLimit.Flags().String("out-bytes", "", "the acl limit out bytes (default not update)")
 	cmdLimit.MarkFlagRequired("key")
 
 	cmdUsage := &cobra.Command{
@@ -74,6 +70,66 @@ func init() {
 		RunE:  aclShow,
 	}
 
+	cmdWhitelistAdd := &cobra.Command{
+		Use:   "add",
+		Short: "add item to acl whitelist",
+		Args:  cobra.ExactArgs(1),
+		RunE:  addWhitelist,
+	}
+
+	cmdWhitelistDel := &cobra.Command{
+		Use:   "del",
+		Short: "delete item from acl whitelist",
+		Args:  cobra.ExactArgs(1),
+		RunE:  delWhitelist,
+	}
+
+	cmdWhitelistReset := &cobra.Command{
+		Use:   "reset",
+		Short: "reset acl whitelist",
+		RunE:  resetWhitelist,
+	}
+
+	cmdWhitelist := &cobra.Command{
+		Use:   "whitelist",
+		Short: "manage the acl whitelist (what is allowed)",
+	}
+	cmdWhitelist.PersistentFlags().String("key", "", "the acl key")
+	cmdWhitelist.MarkPersistentFlagRequired("key")
+
+	cmdWhitelist.AddCommand(cmdWhitelistAdd)
+	cmdWhitelist.AddCommand(cmdWhitelistDel)
+	cmdWhitelist.AddCommand(cmdWhitelistReset)
+
+	cmdBlacklistAdd := &cobra.Command{
+		Use:   "add",
+		Short: "add item to acl blacklist",
+		Args:  cobra.MinimumNArgs(1),
+		RunE:  addBlacklist,
+	}
+
+	cmdBlacklistDel := &cobra.Command{
+		Use:   "del",
+		Short: "delete item from acl blacklist",
+		Args:  cobra.MinimumNArgs(1),
+		RunE:  delBlacklist,
+	}
+
+	cmdBlacklist := &cobra.Command{
+		Use:   "blacklist",
+		Short: "manage the acl blacklist (what is forbidden)",
+	}
+	cmdBlacklistReset := &cobra.Command{
+		Use:   "reset",
+		Short: "reset acl blacklist",
+		RunE:  resetBlacklist,
+	}
+	cmdBlacklist.PersistentFlags().String("key", "", "the acl key")
+	cmdBlacklist.MarkPersistentFlagRequired("key")
+	cmdBlacklist.AddCommand(cmdBlacklistAdd)
+	cmdBlacklist.AddCommand(cmdBlacklistDel)
+	cmdBlacklist.AddCommand(cmdBlacklistReset)
+
 	Cmd.PersistentFlags().StringP("server", "s", "http://127.0.0.1:9986", "toh server")
 	Cmd.PersistentFlags().StringP("admin-key", "k", "", "toh server admin key (default read from admin-key file)")
 	Cmd.AddCommand(cmdNew)
@@ -81,6 +137,8 @@ func init() {
 	Cmd.AddCommand(cmdLimit)
 	Cmd.AddCommand(cmdUsage)
 	Cmd.AddCommand(cmdShowACL)
+	Cmd.AddCommand(cmdWhitelist)
+	Cmd.AddCommand(cmdBlacklist)
 }
 
 func initAction(cmd *cobra.Command, args []string) (err error) {
@@ -114,161 +172,4 @@ func initAction(cmd *cobra.Command, args []string) (err error) {
 
 	cli = api.NewServerAdminClient(server, adminKey)
 	return nil
-}
-
-func aclNew(cmd *cobra.Command, args []string) error {
-	name, err := cmd.Flags().GetString("name")
-	if err != nil {
-		return err
-	}
-	key, err := cli.ACLNewKey(name)
-	if err != nil {
-		return err
-	}
-	fmt.Println(key)
-	return nil
-}
-
-func aclDel(cmd *cobra.Command, args []string) error {
-	key, err := cmd.Flags().GetString("key")
-	if err != nil {
-		return err
-	}
-	err = cli.ACLDelKey(key)
-	if err != nil {
-		return err
-	}
-	fmt.Println("ok")
-	return nil
-}
-
-type LimitOptions struct {
-	Key       string
-	Reset     bool
-	Bytes     string
-	InBytes   string
-	OutBytes  string
-	Witelist  []string
-	Blacklist []string
-}
-
-func aclLimit(cmd *cobra.Command, args []string) (err error) {
-	opts, err := processLimitOptions(cmd)
-	if err != nil {
-		return
-	}
-	if opts.Reset {
-		err = cli.ACLPatchLimit(opts.Key, nil)
-		if err != nil {
-			return
-		}
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "    ")
-		err = enc.Encode(api.Limit{})
-		return
-	}
-	l, err := cli.ACLGetLimit(opts.Key)
-	if err != nil {
-		return err
-	}
-	var update bool
-	if len(opts.Bytes) != 0 {
-		l.Bytes = opts.Bytes
-		update = true
-	}
-	if len(opts.InBytes) != 0 {
-		l.InBytes = opts.InBytes
-		update = true
-	}
-	if len(opts.OutBytes) != 0 {
-		l.OutBytes = opts.OutBytes
-		update = true
-	}
-	if len(opts.Blacklist) != 0 {
-		l.Blacklist = append(l.Blacklist, opts.Blacklist...)
-		update = true
-	}
-	if len(opts.Witelist) != 0 {
-		l.Whitelist = append(l.Whitelist, opts.Witelist...)
-		update = true
-	}
-	if update {
-		err = cli.ACLPatchLimit(opts.Key, l)
-		if err != nil {
-			return err
-		}
-	}
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "    ")
-	err = enc.Encode(l)
-	return
-}
-
-func aclUsage(cmd *cobra.Command, args []string) (err error) {
-	reset, err := cmd.Flags().GetBool("reset")
-	if err != nil {
-		return
-	}
-	key, err := cmd.Flags().GetString("key")
-	if err != nil {
-		return
-	}
-	if reset {
-		err = cli.ACLDelUsage(key)
-		if err != nil {
-			return
-		}
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "    ")
-		err = enc.Encode(api.BytesUsage{})
-		return
-	}
-	usage, err := cli.ACLGetUsage(key)
-	if err != nil {
-		return err
-	}
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "    ")
-	err = enc.Encode(usage)
-	return
-}
-
-func aclShow(cmd *cobra.Command, args []string) (err error) {
-	keys, err := cli.ACLShow()
-	if err != nil {
-		return
-	}
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "    ")
-	err = enc.Encode(keys)
-	return
-}
-
-func processLimitOptions(cmd *cobra.Command) (options LimitOptions, err error) {
-	options.Key, err = cmd.Flags().GetString("key")
-	if err != nil {
-		return
-	}
-	options.Reset, err = cmd.Flags().GetBool("reset")
-	if err != nil {
-		return
-	}
-	options.Bytes, err = cmd.Flags().GetString("bytes")
-	if err != nil {
-		return
-	}
-	options.InBytes, err = cmd.Flags().GetString("in-bytes")
-	if err != nil {
-		return
-	}
-	options.OutBytes, err = cmd.Flags().GetString("out-bytes")
-	if err != nil {
-		return
-	}
-	options.Witelist, err = cmd.Flags().GetStringSlice("whitelist")
-	if err != nil {
-		return
-	}
-	options.Blacklist, err = cmd.Flags().GetStringSlice("blacklist")
-	return
 }
