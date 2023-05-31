@@ -14,6 +14,7 @@
 .googlesource.com
 .gstatic.com
 .youtube.com
+.youtu.be
 .googlevideo.com
 .ytimg.com
 .ggpht.com
