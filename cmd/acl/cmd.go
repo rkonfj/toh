@@ -37,7 +37,7 @@ func init() {
 		Args:  cobra.NoArgs,
 		RunE:  aclDel,
 	}
-	cmdDel.Flags().String("key", "", "the acl key")
+	cmdDel.Flags().String("key", "", "the acl key to operate")
 	cmdDel.MarkFlagRequired("key")
 
 	cmdLimit := &cobra.Command{
@@ -46,8 +46,8 @@ func init() {
 		Args:  cobra.NoArgs,
 		RunE:  aclLimit,
 	}
-	cmdLimit.Flags().String("key", "", "the acl key")
-	cmdLimit.Flags().Bool("reset", false, "reset acl key limit (default false)")
+	cmdLimit.Flags().String("key", "", "the acl key to operate")
+	cmdLimit.Flags().Bool("reset", false, "reset the acl key limit (default false)")
 	cmdLimit.Flags().String("bytes", "", "the acl limit bytes (default not update)")
 	cmdLimit.Flags().String("in-bytes", "", "the acl limit in bytes (default not update)")
 	cmdLimit.Flags().String("out-bytes", "", "the acl limit out bytes (default not update)")
@@ -59,42 +59,42 @@ func init() {
 		Args:  cobra.NoArgs,
 		RunE:  aclUsage,
 	}
-	cmdUsage.Flags().String("key", "", "the acl key")
-	cmdUsage.Flags().Bool("reset", false, "reset acl key usage")
+	cmdUsage.Flags().String("key", "", "the acl key to operate")
+	cmdUsage.Flags().Bool("reset", false, "reset the acl key usage")
 	cmdUsage.MarkFlagRequired("key")
 
 	cmdShowACL := &cobra.Command{
 		Use:   "show",
-		Short: "show acl keys",
+		Short: "show all acl keys",
 		Args:  cobra.NoArgs,
 		RunE:  aclShow,
 	}
 
 	cmdWhitelistAdd := &cobra.Command{
 		Use:   "add",
-		Short: "add item to acl whitelist",
+		Short: "add item to acl key whitelist",
 		Args:  cobra.ExactArgs(1),
 		RunE:  addWhitelist,
 	}
 
 	cmdWhitelistDel := &cobra.Command{
 		Use:   "del",
-		Short: "delete item from acl whitelist",
+		Short: "delete item from acl key whitelist",
 		Args:  cobra.ExactArgs(1),
 		RunE:  delWhitelist,
 	}
 
 	cmdWhitelistReset := &cobra.Command{
 		Use:   "reset",
-		Short: "reset acl whitelist",
+		Short: "reset the acl key whitelist",
 		RunE:  resetWhitelist,
 	}
 
 	cmdWhitelist := &cobra.Command{
 		Use:   "whitelist",
-		Short: "manage the acl whitelist (what is allowed)",
+		Short: "manage the acl key whitelist (what is allowed)",
 	}
-	cmdWhitelist.PersistentFlags().String("key", "", "the acl key")
+	cmdWhitelist.PersistentFlags().String("key", "", "the acl key to operate")
 	cmdWhitelist.MarkPersistentFlagRequired("key")
 
 	cmdWhitelist.AddCommand(cmdWhitelistAdd)
@@ -103,28 +103,28 @@ func init() {
 
 	cmdBlacklistAdd := &cobra.Command{
 		Use:   "add",
-		Short: "add item to acl blacklist",
+		Short: "add item to acl key blacklist",
 		Args:  cobra.MinimumNArgs(1),
 		RunE:  addBlacklist,
 	}
 
 	cmdBlacklistDel := &cobra.Command{
 		Use:   "del",
-		Short: "delete item from acl blacklist",
+		Short: "delete item from acl key blacklist",
 		Args:  cobra.MinimumNArgs(1),
 		RunE:  delBlacklist,
 	}
 
 	cmdBlacklist := &cobra.Command{
 		Use:   "blacklist",
-		Short: "manage the acl blacklist (what is forbidden)",
+		Short: "manage the acl key blacklist (what is forbidden)",
 	}
 	cmdBlacklistReset := &cobra.Command{
 		Use:   "reset",
-		Short: "reset acl blacklist",
+		Short: "reset the acl key blacklist",
 		RunE:  resetBlacklist,
 	}
-	cmdBlacklist.PersistentFlags().String("key", "", "the acl key")
+	cmdBlacklist.PersistentFlags().String("key", "", "the acl key to operate")
 	cmdBlacklist.MarkPersistentFlagRequired("key")
 	cmdBlacklist.AddCommand(cmdBlacklistAdd)
 	cmdBlacklist.AddCommand(cmdBlacklistDel)
