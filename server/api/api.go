@@ -19,3 +19,11 @@ type Key struct {
 	Limit      *Limit      `json:"limit,omitempty"`
 	BytesUsage *BytesUsage `json:"bytesUsage,omitempty"`
 }
+
+type Stats struct {
+	BytesLimit    string      `json:"bytesLimit,omitempty"`
+	InBytesLimit  string      `json:"inBytesLimit,omitempty"`
+	OutBytesLimit string      `json:"outBytesLimit,omitempty"`
+	BytesUsage    *BytesUsage `json:"bytesUsage,omitempty"`
+	Status        string      `json:"status"`
+}

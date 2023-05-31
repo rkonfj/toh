@@ -188,7 +188,8 @@ func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (
 		if err != nil {
 			log.Errorf("socks5 establishing tcp://%s (via %s) error: %s",
 				remoteAddr, dialerName, err)
-			respHostUnreachable(conn)
+			// Host Unreachable https://datatracker.ietf.org/doc/html/rfc1928#section-6
+			conn.Write([]byte{0x05, 0x04, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 			return
 		}
 
@@ -229,15 +230,8 @@ func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (
 	// 3. do not support BIND now
 	default:
 		log.Error("do not support BIND now")
-		respNotSupported(conn)
+		// Command Not Supported https://datatracker.ietf.org/doc/html/rfc1928#section-6
+		conn.Write([]byte{0x05, 0x07, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 	}
 	return
-}
-
-func respHostUnreachable(conn net.Conn) {
-	conn.Write([]byte{0x05, 0x04, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
-}
-
-func respNotSupported(conn net.Conn) {
-	conn.Write([]byte{0x05, 0x07, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00})
 }
