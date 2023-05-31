@@ -74,14 +74,14 @@ func (s TohServer) HandleUpgradeWebSocket(w http.ResponseWriter, r *http.Request
 
 	if err := s.acl.Check(key, network, addr); err != nil {
 		w.WriteHeader(http.StatusUnauthorized)
-		logrus.Infof("%s -> %s://%s %s", clientIP, network, addr, err.Error())
+		logrus.Infof("%s(%s) -> %s://%s: %s", clientIP, key, network, addr, err.Error())
 		return
 	}
 
 	dialer := net.Dialer{}
 	netConn, err := dialer.DialContext(context.Background(), network, addr)
 	if err != nil {
-		logrus.Debugf("%s -> %s://%s dial error %v", clientIP, network, addr, err)
+		logrus.Debugf("%s(%s) -> %s://%s: %s", clientIP, key, network, addr, err)
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(err.Error()))
 		return
