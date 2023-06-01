@@ -132,7 +132,7 @@ func defaultOptions() *server.Config {
 		Servers: []*server.TohServer{{
 			Name:    "us1",
 			Addr:    "https://fill-in-your-server-here.toh.sh/ws",
-			Key:     "5CCQAoN905PdIejsal55Am3z2mXY6ueLrtdSA8OCpVc",
+			Key:     "112qcPA4xPxh7PQV3fyTMEkfByEEn84EjNeMmskVTBVy2aCa4ipX",
 			Ruleset: []string{"https://raw.githubusercontent.com/rkonfj/toh/main/ruleset.txt"},
 		}},
 	}

@@ -23,7 +23,7 @@ time="2023-04-26T21:49:33+08:00" level=info msg="initializing acl file acl.json"
     "keys": [
         {
             "name": "default",
-            "key": "5CCQAoN905PdIejsal55Am3z2mXY6ueLrtdSA8OCpVc"
+            "key": "112qcPA4xPxh7PQV3fyTMEkfByEEn84EjNeMmskVTBVy2aCa4ipX"
         }
     ]
 }
@@ -62,11 +62,11 @@ server {
 - SSH over HTTP
 ```
 $ # get a chatgpt robot
-$ ssh -o ProxyCommand="./toh pf -s https://fill-in-your-server-here.toh.sh/ws -k 5CCQAoN905PdIejsal55Am3z2mXY6ueLrtdSA8OCpVc -f tcp/%h:%p" chat@127.0.0.1
+$ ssh -o ProxyCommand="./toh pf -s https://fill-in-your-server-here.toh.sh/ws -k 112qcPA4xPxh7PQV3fyTMEkfByEEn84EjNeMmskVTBVy2aCa4ipX -f tcp/%h:%p" chat@127.0.0.1
 ```
 - Common use case
 ```sh
-$ ./toh pf -s https://fill-in-your-server-here.toh.sh/ws -k 5CCQAoN905PdIejsal55Am3z2mXY6ueLrtdSA8OCpVc -f udp/127.0.0.53:53/8.8.8.8:53 -f tcp/0.0.0.0:1080/google.com:80
+$ ./toh pf -s https://fill-in-your-server-here.toh.sh/ws -k 112qcPA4xPxh7PQV3fyTMEkfByEEn84EjNeMmskVTBVy2aCa4ipX -f udp/127.0.0.53:53/8.8.8.8:53 -f tcp/0.0.0.0:1080/google.com:80
 time="2023-04-28T13:52:31+08:00" level=info msg="listen on 127.0.0.53:53 for udp://8.8.8.8:53 now"
 time="2023-04-28T13:52:31+08:00" level=info msg="listen on 0.0.0.0:1080 for tcp://google.com:80 now"
 
@@ -87,18 +87,18 @@ The document has moved
 ```sh
 $ ./toh s5
 time="2023-05-12T15:02:11Z" level=info msg="initializing config file /root/.config/toh/socks5.yml"
-listen: localhost:2080
+listen: 127.0.0.1:2080
 servers:
   - name: us1
     api: https://fill-in-your-server-here.toh.sh/ws
-    key: 5CCQAoN905PdIejsal55Am3z2mXY6ueLrtdSA8OCpVc
+    key: 112qcPA4xPxh7PQV3fyTMEkfByEEn84EjNeMmskVTBVy2aCa4ipX
     ruleset:
       - https://raw.githubusercontent.com/rkonfj/toh/main/ruleset.txt
 time="2023-05-12T15:02:11Z" level=info msg="downloading https://raw.githubusercontent.com/rkonfj/toh/main/ruleset.txt"
 time="2023-05-12T15:02:14Z" level=info msg="ruleset   us1: special 0, direct 0, wildcard 21"
 time="2023-05-12T15:02:14Z" level=info msg="total loaded 1 proxy servers and 0 groups"
 time="2023-05-12T15:02:14Z" level=info msg="downloading /root/.config/toh/country.mmdb (this can take up to 5m0s)"
-time="2023-05-12T15:05:17Z" level=info msg="listen on localhost:2080 for socks5 now"
+time="2023-05-12T15:05:17Z" level=info msg="listen on 127.0.0.1:2080 for socks5+http now"
 
 $ # run in another shell
 $ https_proxy=socks5://127.0.0.1:2080 curl https://api64.ipify.org
