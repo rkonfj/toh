@@ -2,7 +2,6 @@ package acl
 
 import (
 	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/decred/base58"
 	"github.com/dustin/go-humanize"
 	"github.com/rkonfj/toh/server/api"
 	"github.com/rkonfj/toh/spec"
@@ -106,7 +106,7 @@ func NewACL(aclPath, adminKey string) (*ACL, error) {
 		buf := make([]byte, 32)
 		rand.Reader.Read(buf)
 		sto = ACLStorage{
-			Keys: []*api.Key{{Name: "default", Key: base64.RawStdEncoding.EncodeToString(buf)}},
+			Keys: []*api.Key{{Name: "default", Key: base58.CheckEncode(buf, [2]byte{0, 0})}},
 		}
 		enc := json.NewEncoder(spec.NewConfigWriter(aclF))
 		enc.SetIndent("", "    ")
@@ -208,7 +208,7 @@ func (a *ACL) UpdateBytesUsage(key string, in, out uint64) {
 func (a *ACL) NewKey(name string) string {
 	buf := make([]byte, 32)
 	rand.Reader.Read(buf)
-	k := base64.RawStdEncoding.EncodeToString(buf)
+	k := base58.CheckEncode(buf, [2]byte{1, 0})
 
 	ke := &api.Key{
 		Name: name,

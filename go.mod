@@ -4,6 +4,7 @@ go 1.20
 
 require (
 	github.com/cenkalti/backoff/v4 v4.2.1
+	github.com/decred/base58 v1.0.5
 	github.com/dustin/go-humanize v1.0.1
 	github.com/gobwas/ws v1.2.1
 	github.com/miekg/dns v1.1.54
@@ -14,6 +15,7 @@ require (
 )
 
 require (
+	github.com/decred/dcrd/crypto/blake256 v1.0.1 // indirect
 	github.com/gobwas/httphead v0.1.0 // indirect
 	github.com/gobwas/pool v0.2.1 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
