@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"os"
 )
 
 // LogField log filed
@@ -38,3 +39,16 @@ var (
 
 // Dial describe the dial func
 type Dial func(ctx context.Context, addr string) (net.Conn, error)
+
+type ConfigFileWriter struct {
+	f *os.File
+}
+
+func NewConfigWriter(f *os.File) *ConfigFileWriter {
+	return &ConfigFileWriter{f: f}
+}
+
+func (w *ConfigFileWriter) Write(p []byte) (n int, err error) {
+	os.Stdout.Write(p)
+	return w.f.Write(p)
+}

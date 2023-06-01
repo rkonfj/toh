@@ -22,7 +22,7 @@ func init() {
 		RunE:  startAction,
 	}
 	Cmd.Flags().StringP("config", "c", "", "config file (default is $HOME/.config/toh/socks5.yml)")
-	Cmd.Flags().StringP("listen", "l", "", "socks5+http listen address (specify this to override config file)")
+	Cmd.Flags().StringP("listen", "l", "", "socks5+http listen address (for override config file)")
 	Cmd.Flags().String("dns", "", "local dns upstream (leave blank to disable local dns)")
 	Cmd.Flags().String("dns-listen", "127.0.0.1:2053", "local dns listen address")
 	Cmd.Flags().String("dns-evict", "2h", "local dns cache evict duration")
