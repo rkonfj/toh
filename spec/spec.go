@@ -20,34 +20,34 @@ type TohClient interface {
 	LookupIP6(host string) (ips []net.IP, err error)
 }
 
-// WSConn websocket connection which used to read, write and close data
-type WSConn interface {
+// StreamConn under layer transport connection. .i.e websocket
+type StreamConn interface {
 	Read(ctx context.Context) ([]byte, error)
 	Write(ctx context.Context, p []byte) error
 	LocalAddr() net.Addr
 	Close(code int, reason string) error
 }
 
-// WSStreamConn tcp/udp connection based on websocket connection
-type WSStreamConn struct {
-	wsConn        WSConn
+// Conn tcp/udp connection based on StreamConn connection
+type Conn struct {
+	conn          StreamConn
 	addr          net.Addr
 	readDeadline  *time.Time
 	writeDeadline *time.Time
 	buf           []byte
 }
 
-func NewWSStreamConn(wsConn WSConn, addr net.Addr) *WSStreamConn {
-	return &WSStreamConn{
-		wsConn: wsConn,
-		addr:   addr,
+func NewConn(conn StreamConn, addr net.Addr) *Conn {
+	return &Conn{
+		conn: conn,
+		addr: addr,
 	}
 }
 
 // Read reads data from the connection.
 // Read can be made to time out and return an error after a fixed
 // time limit; see SetDeadline and SetReadDeadline.
-func (c *WSStreamConn) Read(b []byte) (n int, err error) {
+func (c *Conn) Read(b []byte) (n int, err error) {
 	if c.buf != nil {
 		n = copy(b, c.buf)
 		if n < len(c.buf) {
@@ -65,7 +65,7 @@ func (c *WSStreamConn) Read(b []byte) (n int, err error) {
 		defer cancel()
 	}
 
-	wsb, err := c.wsConn.Read(ctx)
+	wsb, err := c.conn.Read(ctx)
 	if err != nil {
 		if strings.Contains(err.Error(), "StatusNormalClosure") ||
 			strings.Contains(err.Error(), "1000") {
@@ -84,7 +84,7 @@ func (c *WSStreamConn) Read(b []byte) (n int, err error) {
 // Write writes data to the connection.
 // Write can be made to time out and return an error after a fixed
 // time limit; see SetDeadline and SetWriteDeadline.
-func (c *WSStreamConn) Write(b []byte) (n int, err error) {
+func (c *Conn) Write(b []byte) (n int, err error) {
 	ctx := context.Background()
 	if c.writeDeadline != nil {
 		_ctx, cancel := context.WithDeadline(context.Background(), *c.writeDeadline)
@@ -92,23 +92,23 @@ func (c *WSStreamConn) Write(b []byte) (n int, err error) {
 		defer cancel()
 	}
 	n = len(b)
-	err = c.wsConn.Write(ctx, b)
+	err = c.conn.Write(ctx, b)
 	return
 }
 
 // Close closes the connection.
 // Any blocked Read or Write operations will be unblocked and return errors.
-func (c *WSStreamConn) Close() error {
-	return c.wsConn.Close(1000, "have read")
+func (c *Conn) Close() error {
+	return c.conn.Close(1000, "StatusNormalClosure")
 }
 
 // LocalAddr returns the local network address, if known.
-func (c *WSStreamConn) LocalAddr() net.Addr {
-	return c.wsConn.LocalAddr()
+func (c *Conn) LocalAddr() net.Addr {
+	return c.conn.LocalAddr()
 }
 
 // RemoteAddr returns the remote network address, if known.
-func (c *WSStreamConn) RemoteAddr() net.Addr {
+func (c *Conn) RemoteAddr() net.Addr {
 	return c.addr
 }
 
@@ -133,7 +133,7 @@ func (c *WSStreamConn) RemoteAddr() net.Addr {
 // the deadline after successful Read or Write calls.
 //
 // A zero value for t means I/O operations will not time out.
-func (c *WSStreamConn) SetDeadline(t time.Time) error {
+func (c *Conn) SetDeadline(t time.Time) error {
 	c.readDeadline = &t
 	c.writeDeadline = &t
 	return nil
@@ -142,7 +142,7 @@ func (c *WSStreamConn) SetDeadline(t time.Time) error {
 // SetReadDeadline sets the deadline for future Read calls
 // and any currently-blocked Read call.
 // A zero value for t means Read will not time out.
-func (c *WSStreamConn) SetReadDeadline(t time.Time) error {
+func (c *Conn) SetReadDeadline(t time.Time) error {
 	c.readDeadline = &t
 	return nil
 }
@@ -152,7 +152,7 @@ func (c *WSStreamConn) SetReadDeadline(t time.Time) error {
 // Even if write times out, it may return n > 0, indicating that
 // some of the data was successfully written.
 // A zero value for t means Write will not time out.
-func (c *WSStreamConn) SetWriteDeadline(t time.Time) error {
+func (c *Conn) SetWriteDeadline(t time.Time) error {
 	c.writeDeadline = &t
 	return nil
 }

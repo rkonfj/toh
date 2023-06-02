@@ -178,13 +178,13 @@ func (c *TohClient) DialContext(ctx context.Context, network, address string) (n
 		if err != nil {
 			return nil, err
 		}
-		return spec.NewWSStreamConn(conn, addr), nil
+		return spec.NewConn(conn, addr), nil
 	case "udp", "udp4", "udp6":
 		conn, addr, err := c.dial(ctx, network, address)
 		if err != nil {
 			return nil, err
 		}
-		return &spec.PacketConnWrapper{Conn: spec.NewWSStreamConn(conn, addr)}, nil
+		return &spec.PacketConnWrapper{Conn: spec.NewConn(conn, addr)}, nil
 	default:
 		return nil, errors.New("unsupport network " + network)
 	}
@@ -225,7 +225,7 @@ func (c *TohClient) dnsExchange(dnServer string, query *dns.Msg) (resp *dns.Msg,
 }
 
 func (c *TohClient) dial(ctx context.Context, network, addr string) (
-	wsConn *wsConn, remoteAddr net.Addr, err error) {
+	conn spec.StreamConn, remoteAddr net.Addr, err error) {
 	handshake := http.Header{}
 	handshake.Add(spec.HeaderHandshakeKey, c.options.Key)
 	handshake.Add(spec.HeaderHandshakeNet, network)
@@ -238,13 +238,13 @@ func (c *TohClient) dial(ctx context.Context, network, addr string) (
 
 	t1 := time.Now()
 
-	wsConn, respHeader, err := c.dialWS(ctx, c.options.Server, handshake)
+	conn, respHeader, err := c.dialWS(ctx, c.options.Server, handshake)
 	if err != nil {
 		return
 	}
 	logrus.Debugf("%s://%s established successfully, toh latency %s", network, addr, time.Since(t1))
 
-	go c.newPingLoop(wsConn)
+	go c.newPingLoop(conn.(*wsConn))
 	estAddr := respHeader.Get(spec.HeaderEstablishAddr)
 	if len(estAddr) == 0 {
 		estAddr = "0.0.0.0:0"

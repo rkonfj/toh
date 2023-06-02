@@ -96,7 +96,7 @@ func (s TohServer) HandleUpgradeWebSocket(w http.ResponseWriter, r *http.Request
 	}
 
 	go func() {
-		lbc, rbc := s.pipe(spec.NewWSStreamConn(&wsConn{conn: conn}, conn.RemoteAddr()), netConn)
+		lbc, rbc := s.pipe(spec.NewConn(&wsConn{conn: conn}, conn.RemoteAddr()), netConn)
 		s.trafficEventChan <- &TrafficEvent{
 			In:         lbc,
 			Out:        rbc,
@@ -108,7 +108,7 @@ func (s TohServer) HandleUpgradeWebSocket(w http.ResponseWriter, r *http.Request
 	}()
 }
 
-func (s *TohServer) pipe(wsConn *spec.WSStreamConn, netConn net.Conn) (lbc, rbc int64) {
+func (s *TohServer) pipe(wsConn *spec.Conn, netConn net.Conn) (lbc, rbc int64) {
 	if wsConn == nil || netConn == nil {
 		return
 	}
