@@ -12,6 +12,7 @@
 .googleapis.com
 .googleusercontent.com
 .googlesource.com
+.opensource.google
 .gstatic.com
 .youtube.com
 .youtu.be
@@ -30,6 +31,7 @@
 
 ! Go
 .go.dev
+.golang.org
 
 ! StackOverflow
 .stackoverflow.com
@@ -57,6 +59,7 @@
 ! Telegram
 .t.me
 .telegram.org
+.telegram.me
 
 ! Twitter
 .twitter.com
@@ -81,3 +84,4 @@
 .grafana.com
 .jsdelivr.net
 .ipify.org
+.curl.se
