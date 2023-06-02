@@ -26,12 +26,12 @@ func (s *Socks5Server) startUDPListenLoop(l net.PacketConn) {
 
 func (s *Socks5Server) pipeSocks5UDP(buf []byte, bc int, udpConn net.PacketConn, clientAddr net.Addr) {
 	packet := buf[:bc]
-	host, port, payload, err := decodeSocks5Packet(packet)
+	ip, port, payload, err := decodeSocks5Packet(packet)
 	if err != nil {
 		logrus.Error(err)
 		return
 	}
-	addr := fmt.Sprintf("%s:%d", host, port)
+	addr := net.JoinHostPort(ip.String(), fmt.Sprintf("%d", port))
 	ctx := context.WithValue(context.Background(), spec.AppAddr, clientAddr.String())
 	dialerName, conn, err := s.opts.UDPDialContext(ctx, addr)
 	if err != nil {
@@ -51,12 +51,12 @@ func (s *Socks5Server) pipeSocks5UDP(buf []byte, bc int, udpConn net.PacketConn,
 		logrus.Error(err)
 		return
 	}
-
-	udpPacket := bytes.Join([][]byte{
-		{0, 0, 0, 1},
-		net.ParseIP(host).To4(),
-		spec.Uint16ToBytes(port),
-		buf[:n]}, []byte{})
+	var udpPacket []byte
+	if ip.To4() == nil {
+		udpPacket = bytes.Join([][]byte{{0, 0, 0, 4}, ip.To16(), spec.Uint16ToBytes(port), buf[:n]}, []byte{})
+	} else {
+		udpPacket = bytes.Join([][]byte{{0, 0, 0, 1}, ip.To4(), spec.Uint16ToBytes(port), buf[:n]}, []byte{})
+	}
 	n, err = udpConn.WriteTo(udpPacket, clientAddr)
 	if err != nil {
 		logrus.Error(err)
@@ -73,7 +73,7 @@ func (s *Socks5Server) pipeSocks5UDP(buf []byte, bc int, udpConn net.PacketConn,
 	})
 }
 
-func decodeSocks5Packet(packet []byte) (host string, port uint16, payload []byte, err error) {
+func decodeSocks5Packet(packet []byte) (ip net.IP, port uint16, payload []byte, err error) {
 	errInvalidDatagram := errors.New("invalid socks5 udp datagram")
 	if len(packet) < 4 {
 		err = errInvalidDatagram
@@ -90,18 +90,24 @@ func decodeSocks5Packet(packet []byte) (host string, port uint16, payload []byte
 		return
 	}
 
+	var packetHeadLen int
 	switch packet[3] {
 	case 1:
-		if len(packet) < 4+4+2 {
-			err = errInvalidDatagram
-			return
-		}
-		host = net.IPv4(packet[4], packet[5], packet[6], packet[7]).String()
-		port = spec.BytesToUint16(packet[8 : 8+2])
-		payload = packet[4+4+2:]
+		packetHeadLen = 4 + 4 + 2
+	case 4:
+		packetHeadLen = 4 + 16 + 2
 	default:
 		err = errors.New("discard unsupport ATYP")
 		return
 	}
+	if len(packet) < packetHeadLen {
+		err = errInvalidDatagram
+		return
+	}
+	b := make([]byte, packetHeadLen-6)
+	copy(b, packet[4:packetHeadLen-2])
+	ip = net.IP(b)
+	port = spec.BytesToUint16(packet[packetHeadLen-2 : packetHeadLen])
+	payload = packet[packetHeadLen:]
 	return
 }
