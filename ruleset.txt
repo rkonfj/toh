@@ -41,6 +41,15 @@
 ! WiKi
 .wikipedia.org
 .wikimedia.org
+.wikiversity.org
+.wikidata.org
+.wiktionary.org
+.wikibooks.org
+.wikinews.org
+.wikisource.org
+.wikiquote.org
+.wikivoyage.org
+.mediawiki.org
 
 ! Reddit
 .reddit.com
