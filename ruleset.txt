@@ -64,6 +64,7 @@
 .bitnami.com
 .docker.com
 .k8s.io
+.gcr.io
 
 ! Telegram
 .t.me
@@ -74,6 +75,7 @@
 .twitter.com
 .twimg.com
 .cms-twdigitalassets.com
+.t.co
 
 ! Instagram
 .instagram.com
@@ -94,3 +96,4 @@
 .jsdelivr.net
 .ipify.org
 .curl.se
+.bootstrapcdn.com
