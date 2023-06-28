@@ -65,6 +65,7 @@
 .docker.com
 .k8s.io
 .gcr.io
+.pkg.dev
 
 ! Telegram
 .t.me
