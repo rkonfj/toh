@@ -62,6 +62,8 @@ type ServerGroup struct {
 	Servers []string `yaml:"servers"`
 	// same as `servers` section
 	Ruleset []string `yaml:"ruleset"`
+	// loadbalancer rule. Round Robin (rr) or Best Latency (bl), default is bl
+	Loadbalancer string `yaml:"loadbalancer"`
 }
 
 type LocalNet struct {

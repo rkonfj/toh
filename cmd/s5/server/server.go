@@ -133,10 +133,20 @@ type Group struct {
 	name    string
 	servers []*Server
 	ruleset *ruleset.Ruleset
+	lb      string
+	next    int
 }
 
 func (g *Group) selectServer() *Server {
-	return selectServer(g.servers)
+	switch g.lb {
+	case "rr":
+		// round robin
+		g.next = (g.next + 1) % len(g.servers)
+		return g.servers[g.next]
+	default:
+		// best latency
+		return selectServer(g.servers)
+	}
 }
 
 func NewS5Server(opts Options) (s5Server *S5Server, err error) {
@@ -270,6 +280,7 @@ func (s *S5Server) loadGroups() (err error) {
 		group := &Group{
 			name:    g.Name,
 			servers: []*Server{},
+			lb:      g.Loadbalancer,
 		}
 		for _, s := range s.servers {
 			if spec.SliceIndex(g.Servers, s.name) >= 0 {
