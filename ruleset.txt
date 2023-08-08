@@ -60,6 +60,9 @@
 ! Android
 .android.com
 
+! F-Droid
+.f-droid.org
+
 ! Linux Containers
 .bitnami.com
 .docker.com
