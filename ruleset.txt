@@ -37,6 +37,7 @@
 .stackoverflow.com
 .sstatic.net
 .superuser.com
+.askubuntu.com
 
 ! WiKi
 .wikipedia.org
