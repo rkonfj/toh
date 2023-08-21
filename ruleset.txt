@@ -3,6 +3,7 @@
 
 ! Organizations in cooperation with ISO
 .ietf.org
+.rfc-editor.org
 
 ! Google
 .google.com
