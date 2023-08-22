@@ -29,6 +29,7 @@
 .github.com
 .githubusercontent.com
 .github.blog
+.githubassets.com
 
 ! Go
 .go.dev
