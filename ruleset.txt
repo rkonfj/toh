@@ -105,3 +105,4 @@
 .ipify.org
 .curl.se
 .bootstrapcdn.com
+.die.net
