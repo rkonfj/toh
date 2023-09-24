@@ -13,7 +13,7 @@ func init() {
 		Use:   "pf",
 		Short: "Port-forwarding daemon act as ToH client",
 		Args:  cobra.NoArgs,
-		RunE:  startAction,
+		RunE:  runAction,
 	}
 	Cmd.Flags().StringP("server", "s", "", "the ToH server address")
 	Cmd.Flags().StringP("key", "k", "", "the ToH api-key for authcate")
@@ -28,7 +28,7 @@ func init() {
 	Cmd.MarkFlagRequired("forward")
 }
 
-func startAction(cmd *cobra.Command, args []string) error {
+func runAction(cmd *cobra.Command, args []string) error {
 	options, err := processOptions(cmd)
 	if err != nil {
 		return err

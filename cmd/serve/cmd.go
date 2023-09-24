@@ -13,7 +13,7 @@ func init() {
 		Use:   "serve",
 		Short: "ToH server daemon",
 		Args:  cobra.NoArgs,
-		RunE:  startAction,
+		RunE:  runAction,
 	}
 	Cmd.Flags().String("acl", "acl.json", "file containing access control rules")
 	Cmd.Flags().String("admin-key", "", "key to access the admin api (leave blank to disable admin api)")
@@ -21,7 +21,7 @@ func init() {
 	Cmd.Flags().StringP("listen", "l", "127.0.0.1:9986", "http server listen address")
 }
 
-func startAction(cmd *cobra.Command, args []string) error {
+func runAction(cmd *cobra.Command, args []string) error {
 	options, err := processServerOptions(cmd)
 	if err != nil {
 		return err

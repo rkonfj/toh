@@ -11,10 +11,10 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
-	"github.com/rkonfj/toh/spec"
 	"github.com/sirupsen/logrus"
 )
 
@@ -217,9 +217,9 @@ func (rs *Ruleset) IfIPCountryMatch(country string) bool {
 		return false
 	}
 	if len(rs.ifIPDirectCountrySet) > 0 {
-		return spec.SliceIndex(rs.ifIPDirectCountrySet, country) < 0
+		return !slices.Contains(rs.ifIPDirectCountrySet, country)
 	}
-	return spec.SliceIndex(rs.ifIPProxyCountrySet, country) >= 0
+	return slices.Contains(rs.ifIPProxyCountrySet, country)
 }
 
 func (rs *Ruleset) CountryMatch(country string) bool {
@@ -227,9 +227,9 @@ func (rs *Ruleset) CountryMatch(country string) bool {
 		return false
 	}
 	if len(rs.directCountrySet) > 0 {
-		return spec.SliceIndex(rs.directCountrySet, country) < 0
+		return !slices.Contains(rs.directCountrySet, country)
 	}
-	return spec.SliceIndex(rs.proxyCountrySet, country) >= 0
+	return slices.Contains(rs.proxyCountrySet, country)
 }
 
 func (rs *Ruleset) MatchStrategy() int {

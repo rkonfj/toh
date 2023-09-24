@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"io"
-	"math"
 	"net"
 	"net/http"
 	"os"
@@ -45,7 +44,7 @@ func NewTohServer(options Options) (*TohServer, error) {
 		adminAPI:         &admin.AdminAPI{ACL: acl},
 		trafficEventChan: make(chan *TrafficEvent, 2048),
 		bufPool: &sync.Pool{New: func() any {
-			buf := make([]byte, int(math.Max(float64(options.Buf), 1472)))
+			buf := make([]byte, max(1472, options.Buf))
 			return &buf
 		}},
 	}, nil

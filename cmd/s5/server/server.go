@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"syscall"
@@ -283,7 +284,7 @@ func (s *S5Server) loadGroups() (err error) {
 			lb:      g.Loadbalancer,
 		}
 		for _, s := range s.servers {
-			if spec.SliceIndex(g.Servers, s.name) >= 0 {
+			if slices.Contains(g.Servers, s.name) {
 				group.servers = append(group.servers, s)
 			}
 		}

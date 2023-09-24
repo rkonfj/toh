@@ -19,7 +19,7 @@ func init() {
 		Use:   "s5",
 		Short: "Socks5+http proxy server act as ToH client",
 		Args:  cobra.NoArgs,
-		RunE:  startAction,
+		RunE:  runAction,
 	}
 	Cmd.Flags().StringP("config", "c", "", "config file (default is $HOME/.config/toh/socks5.yml)")
 	Cmd.Flags().StringP("listen", "l", "", "socks5+http listen address (for override config file)")
@@ -29,7 +29,7 @@ func init() {
 	Cmd.Flags().StringSlice("dns-fake", []string{}, "local fake dns (leave blank to disable fake dns)")
 }
 
-func startAction(cmd *cobra.Command, args []string) error {
+func runAction(cmd *cobra.Command, args []string) error {
 	opts, err := processOptions(cmd)
 	if err != nil {
 		return err

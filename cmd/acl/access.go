@@ -3,15 +3,15 @@ package acl
 import (
 	"encoding/json"
 	"os"
+	"slices"
 
-	"github.com/rkonfj/toh/spec"
 	"github.com/spf13/cobra"
 )
 
 func addWhitelist(cmd *cobra.Command, args []string) error {
 	return updateWhitelist(cmd, func(old []string) []string {
 		for _, a := range args {
-			if spec.SliceIndex(old, a) >= 0 {
+			if slices.Contains(old, a) {
 				continue
 			}
 			old = append(old, a)
@@ -24,7 +24,7 @@ func delWhitelist(cmd *cobra.Command, args []string) error {
 	return updateWhitelist(cmd, func(old []string) []string {
 		var newList []string
 		for _, a := range old {
-			if spec.SliceIndex(args, a) < 0 {
+			if slices.Contains(args, a) {
 				newList = append(newList, a)
 			}
 		}
@@ -41,7 +41,7 @@ func resetWhitelist(cmd *cobra.Command, args []string) error {
 func addBlacklist(cmd *cobra.Command, args []string) error {
 	return updateBlacklist(cmd, func(old []string) []string {
 		for _, a := range args {
-			if spec.SliceIndex(old, a) >= 0 {
+			if slices.Contains(old, a) {
 				continue
 			}
 			old = append(old, a)
@@ -54,7 +54,7 @@ func delBlacklist(cmd *cobra.Command, args []string) error {
 	return updateBlacklist(cmd, func(old []string) []string {
 		var newList []string
 		for _, a := range old {
-			if spec.SliceIndex(args, a) < 0 {
+			if slices.Contains(args, a) {
 				newList = append(newList, a)
 			}
 		}
