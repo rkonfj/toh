@@ -25,6 +25,10 @@
 .openai.com
 .agpt.co
 
+! AI
+.huggingface.co
+.mlc.ai
+
 ! GitHub
 .github.com
 .githubusercontent.com
@@ -85,9 +89,12 @@
 .cms-twdigitalassets.com
 .t.co
 
-! Instagram
+! Meta
 .instagram.com
 .cdninstagram.com
+.meta.com
+.fbcdn.net
+.facebook.com
 
 ! The New York Times
 .nytimes.com
