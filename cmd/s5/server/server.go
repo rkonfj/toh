@@ -179,6 +179,7 @@ func NewS5Server(opts Options) (s5Server *S5Server, err error) {
 		s5Server.socks5Opts.Listen = opts.Listen
 	}
 
+	// use proxy server to exchange dns message
 	s5Server.dns = D.NewLocalDNS(D.Options{
 		Listen:   opts.DNSListen,
 		Upstream: opts.DNSUpstream,

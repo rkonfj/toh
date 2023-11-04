@@ -19,13 +19,16 @@ var (
 	ErrLocalDNSDisabled = errors.New("local dns is disabled")
 )
 
+// Options local dns server options
 type Options struct {
-	Listen   string
-	Upstream string
-	Evict    time.Duration
-	Exchange func(upstream string, clientAddr string, query *dns.Msg) (resp *dns.Msg, err error)
+	Listen   string                                                                              // listen address
+	Upstream string                                                                              // upstream dns server
+	Evict    time.Duration                                                                       // cache evict duration
+	Exchange func(upstream string, clientAddr string, query *dns.Msg) (resp *dns.Msg, err error) // dns message exchange function
 }
 
+// LocalDNS local dns server
+// it has a simple dns cache, and can customize dns message exchange function
 type LocalDNS struct {
 	client      *dns.Client
 	cache       *dnsCache
@@ -47,57 +50,7 @@ func NewLocalDNS(opts Options) *LocalDNS {
 	}
 }
 
-type cacheEntry struct {
-	response *dns.Msg
-	expire   time.Time
-}
-
-type hostCacheEntry struct {
-	hosts  []string
-	expire time.Time
-}
-
-type dnsCache struct {
-	lock      sync.RWMutex
-	cache     map[string]*cacheEntry
-	hostCache map[string]*hostCacheEntry
-}
-
-func (c *dnsCache) hosts(ip string) ([]string, bool) {
-	c.lock.RLock()
-	defer c.lock.RUnlock()
-	if entry, ok := c.hostCache[ip]; ok {
-		return entry.hosts, ok
-	}
-	return nil, false
-}
-
-func (c *dnsCache) get(key string) (*cacheEntry, bool) {
-	c.lock.RLock()
-	defer c.lock.RUnlock()
-	entry, ok := c.cache[key]
-	return entry, ok
-}
-
-func (c *dnsCache) set(key string, entry *cacheEntry) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	c.cache[key] = entry
-	host := entry.response.Question[0].Name
-	for _, a := range entry.response.Answer {
-		var ip string
-		if a.Header().Rrtype == dns.TypeA {
-			ip = a.(*dns.A).A.To4().String()
-		} else if a.Header().Rrtype == dns.TypeAAAA {
-			ip = a.(*dns.AAAA).AAAA.String()
-		}
-		if _, ok := c.hostCache[ip]; !ok {
-			c.hostCache[ip] = &hostCacheEntry{expire: entry.expire}
-		}
-		c.hostCache[ip].hosts = append(c.hostCache[ip].hosts, strings.Trim(host, "."))
-	}
-}
-
+// dnsCacheEvictLoop evict expired dns cache
 func (c *LocalDNS) dnsCacheEvictLoop() {
 	for range c.cacheTicker.C {
 		expiredKeys := []string{}
@@ -123,6 +76,7 @@ func (c *LocalDNS) dnsCacheEvictLoop() {
 	}
 }
 
+// Run run the local dns server
 func (s *LocalDNS) Run() {
 	if len(s.opts.Upstream) == 0 {
 		return
@@ -153,6 +107,7 @@ func (s *LocalDNS) Run() {
 	wg.Wait()
 }
 
+// LookupIP lookup ip address for a host use custom exchange function
 func (s *LocalDNS) LookupIP(host string,
 	exchange func(dnServer string, query *dns.Msg) (resp *dns.Msg, err error)) (ips []net.IP, err error) {
 	if !s.enabled {
@@ -218,6 +173,7 @@ func (s *LocalDNS) LookupIP(host string,
 	return
 }
 
+// ReverseLookup reverse lookup hostnames for an ip address
 func (s *LocalDNS) ReverseLookup(ip string) (hosts []string, err error) {
 	if !s.enabled {
 		err = ErrLocalDNSDisabled
@@ -287,4 +243,55 @@ func (s *LocalDNS) cacheResponse(req, resp *dns.Msg) *cacheEntry {
 	}
 	s.cache.set(req.Question[0].String(), entry)
 	return entry
+}
+
+type cacheEntry struct {
+	response *dns.Msg
+	expire   time.Time
+}
+
+type hostCacheEntry struct {
+	hosts  []string
+	expire time.Time
+}
+
+type dnsCache struct {
+	lock      sync.RWMutex
+	cache     map[string]*cacheEntry
+	hostCache map[string]*hostCacheEntry
+}
+
+func (c *dnsCache) hosts(ip string) ([]string, bool) {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+	if entry, ok := c.hostCache[ip]; ok {
+		return entry.hosts, ok
+	}
+	return nil, false
+}
+
+func (c *dnsCache) get(key string) (*cacheEntry, bool) {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+	entry, ok := c.cache[key]
+	return entry, ok
+}
+
+func (c *dnsCache) set(key string, entry *cacheEntry) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	c.cache[key] = entry
+	host := entry.response.Question[0].Name
+	for _, a := range entry.response.Answer {
+		var ip string
+		if a.Header().Rrtype == dns.TypeA {
+			ip = a.(*dns.A).A.To4().String()
+		} else if a.Header().Rrtype == dns.TypeAAAA {
+			ip = a.(*dns.AAAA).AAAA.String()
+		}
+		if _, ok := c.hostCache[ip]; !ok {
+			c.hostCache[ip] = &hostCacheEntry{expire: entry.expire}
+		}
+		c.hostCache[ip].hosts = append(c.hostCache[ip].hosts, strings.Trim(host, "."))
+	}
 }
