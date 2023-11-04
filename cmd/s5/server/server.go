@@ -445,13 +445,14 @@ func (s *S5Server) openGeoip2() {
 	s.geoip2db = db
 }
 
+// watchSignal handle user signal
 func (s *S5Server) watchSignal() {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGHUP)
 	for {
 		sig := <-sigs
 		switch sig {
-		case syscall.SIGHUP:
+		case syscall.SIGHUP: // reload ruleset
 			s.reloadRuleset()
 		default:
 		}
@@ -475,6 +476,7 @@ func (s *S5Server) reloadRuleset() {
 	s.printRulesetStats()
 }
 
+// localAddrFamilyDetection detect local network address family
 func (s *S5Server) localAddrFamilyDetection() {
 	if s.opts.Cfg.LocalNet == nil {
 		return
@@ -535,6 +537,7 @@ func newHTTPClient(lookupIP func(host string) (ips []net.IP, err error)) *http.C
 	}
 }
 
+// selectServer select a best latency  proxy server from servers
 func selectServer(servers []*Server) *Server {
 	var s []*Server
 	for _, server := range servers {
@@ -555,6 +558,7 @@ func selectServer(servers []*Server) *Server {
 	return s[0]
 }
 
+// downloadGeoip2DB download geoip2 db from github
 func downloadGeoip2DB(hc *http.Client, geoip2Path string) {
 	logrus.Infof("downloading %s (this can take up to %s)", geoip2Path, hc.Timeout)
 	mmdbURL := "https://github.com/Dreamacro/maxmind-geoip/releases/latest/download/Country.mmdb"
