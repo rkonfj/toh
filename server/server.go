@@ -20,17 +20,17 @@ import (
 
 type TohServer struct {
 	adminAPI         *admin.AdminAPI
-	options          Options
 	acl              *acl.ACL
 	trafficEventChan chan *TrafficEvent
 	bufPool          *sync.Pool
+	httpServer       *http.Server
 }
 
 type Options struct {
-	Listen   string
-	ACL      string
-	Buf      uint64
-	AdminKey string
+	Listen   string // http server listen address. required
+	ACL      string // acl json file path. required
+	Buf      uint64 // pipe buffer size, default is 1472. optional
+	AdminKey string // admin api authenticate key. optional
 }
 
 func NewTohServer(options Options) (*TohServer, error) {
@@ -39,7 +39,7 @@ func NewTohServer(options Options) (*TohServer, error) {
 		return nil, err
 	}
 	return &TohServer{
-		options:          options,
+		httpServer:       &http.Server{Addr: options.Listen},
 		acl:              acl,
 		adminAPI:         &admin.AdminAPI{ACL: acl},
 		trafficEventChan: make(chan *TrafficEvent, 2048),
@@ -55,17 +55,21 @@ func (s *TohServer) Run() {
 	go s.runShutdownListener()
 	s.adminAPI.Register()
 
-	http.HandleFunc("/stats", s.HandleShowStats)
-	http.HandleFunc("/", s.HandleUpgradeWebSocket)
+	http.HandleFunc("/stats", s.handleShowStats)
+	http.HandleFunc("/", s.handleUpgradeWebSocket)
 
-	logrus.Infof("server listen on %s now", s.options.Listen)
-	err := http.ListenAndServe(s.options.Listen, nil)
+	logrus.Infof("server listen on %s now", s.httpServer.Addr)
+	err := s.httpServer.ListenAndServe()
 	if err != nil {
 		logrus.Error(err)
 	}
 }
 
-func (s TohServer) HandleUpgradeWebSocket(w http.ResponseWriter, r *http.Request) {
+func (s *TohServer) Shutdown(ctx context.Context) error {
+	return s.httpServer.Shutdown(ctx)
+}
+
+func (s *TohServer) handleUpgradeWebSocket(w http.ResponseWriter, r *http.Request) {
 	key := r.Header.Get(spec.HeaderHandshakeKey)
 	network := r.Header.Get(spec.HeaderHandshakeNet)
 	addr := r.Header.Get(spec.HeaderHandshakeAddr)

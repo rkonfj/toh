@@ -34,7 +34,7 @@ func (s *TohServer) runTrafficEventConsumeLoop() {
 	}
 }
 
-func (s *TohServer) HandleShowStats(w http.ResponseWriter, r *http.Request) {
+func (s *TohServer) handleShowStats(w http.ResponseWriter, r *http.Request) {
 	apiKey := r.Header.Get(spec.HeaderHandshakeKey)
 	clientIP := spec.RealIP(r)
 	err := s.acl.CheckKey(apiKey)
