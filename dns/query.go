@@ -16,7 +16,7 @@ var DefaultResolver Resolver = Resolver{
 	IPv4Servers: []string{"8.8.8.8:53", "223.5.5.5:53"},
 	IPv6Servers: []string{"[2001:4860:4860::8888]:53", "[2400:3200::1]:53"},
 	Exchange: func(dnServer string, r *dns.Msg) (resp *dns.Msg, err error) {
-		dnsLookupCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		dnsLookupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		resp, _, err = dnsClient.ExchangeContext(dnsLookupCtx, r, dnServer)
 		return
