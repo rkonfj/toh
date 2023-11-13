@@ -1,6 +1,5 @@
-FROM golang:1.20-alpine AS builder
+FROM golang:1.21-alpine AS builder
 ADD . /toh
-ENV GOPROXY https://goproxy.cn,direct
 WORKDIR /toh
 ARG version=unknown
 ARG githash=unknown
