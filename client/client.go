@@ -24,15 +24,15 @@ import (
 )
 
 type TohClient struct {
-	options         Options
-	connIdleTimeout time.Duration
-	netDial         func(ctx context.Context, network, addr string) (conn net.Conn, err error)
-	httpClient      *http.Client
-	serverIPv4s     []net.IP
-	serverIPv6s     []net.IP
-	serverPort      string
-	dnsClient       *dns.Client
-	resolver        *D.Resolver
+	options          Options
+	connIdleTimeout  time.Duration
+	directNetDial    func(ctx context.Context, network, addr string) (conn net.Conn, err error)
+	directHttpClient *http.Client
+	serverIPv4s      []net.IP
+	serverIPv6s      []net.IP
+	serverPort       string
+	dnsClient        *dns.Client
+	proxyDNSResolver *D.Resolver
 }
 
 type Options struct {
@@ -50,50 +50,41 @@ func NewTohClient(options Options) (*TohClient, error) {
 		dnsClient:       &dns.Client{},
 		connIdleTimeout: 75 * time.Second,
 	}
-	dialer := net.Dialer{}
-	c.resolver = &D.Resolver{
+	c.proxyDNSResolver = &D.Resolver{
 		IPv4Servers: D.DefaultResolver.IPv4Servers,
 		IPv6Servers: D.DefaultResolver.IPv6Servers,
-		Exchange:    c.dnsExchange}
-	c.netDial = func(ctx context.Context, network, addr string) (conn net.Conn, err error) {
+		Exchange:    c.dnsExchange,
+	}
+	c.directNetDial = func(ctx context.Context, network, addr string) (conn net.Conn, err error) {
 		if len(c.serverIPv6s) == 0 && len(c.serverIPv4s) == 0 {
 			var host string
 			host, c.serverPort, err = net.SplitHostPort(addr)
 			if err != nil {
 				return
 			}
-			ipv4Done := make(chan bool)
-			ipv6Done := make(chan bool)
-			ipv4Ok := make(chan bool)
-			ipv6Ok := make(chan bool)
-			defer close(ipv4Ok)
-			go func() {
-				<-ipv6Done
-				<-ipv4Done
-				close(ipv6Ok)
-			}()
 
+			ipv4Ok := make(chan struct{})
+			ipv6Ok := make(chan struct{})
 			go func() {
-				defer close(ipv6Done)
 				c.serverIPv6s, err = D.LookupIP6(host)
 				if err != nil {
 					logrus.Debugf("lookup6 for %s: %s", host, err)
+					time.AfterFunc(5*time.Second, func() { close(ipv6Ok) })
 					return
 				}
 				if len(c.serverIPv6s) > 0 {
-					ipv6Ok <- true
+					ipv6Ok <- struct{}{}
 				}
 			}()
-
 			go func() {
-				defer close(ipv4Done)
 				c.serverIPv4s, err = D.LookupIP4(host)
 				if err != nil {
 					logrus.Debugf("lookup4 for %s: %s", host, err)
+					time.AfterFunc(5*time.Second, func() { close(ipv4Ok) })
 					return
 				}
 				if len(c.serverIPv4s) > 0 {
-					ipv4Ok <- true
+					ipv4Ok <- struct{}{}
 				}
 			}()
 			select {
@@ -101,24 +92,21 @@ func NewTohClient(options Options) (*TohClient, error) {
 			case <-ipv6Ok:
 			}
 		}
-		if len(c.serverIPv6s) > 0 {
-			address := net.JoinHostPort(c.serverIPv6s[rand.Intn(len(c.serverIPv6s))].String(), c.serverPort)
-			conn, err = dialer.DialContext(ctx, network, address)
-			if err == nil {
-				return
-			}
-		}
-		if len(c.serverIPv4s) > 0 {
-			address := net.JoinHostPort(c.serverIPv4s[rand.Intn(len(c.serverIPv4s))].String(), c.serverPort)
-			conn, err = dialer.DialContext(ctx, network, address)
+		var serverIPAddr string
+		if len(c.serverIPv6s) > 0 { // ipv6 first
+			serverIPAddr = net.JoinHostPort(c.serverIPv6s[rand.Intn(len(c.serverIPv6s))].String(), c.serverPort)
+		} else if len(c.serverIPv4s) > 0 { // fallback to ipv4
+			serverIPAddr = net.JoinHostPort(c.serverIPv4s[rand.Intn(len(c.serverIPv4s))].String(), c.serverPort)
+		} else {
+			err = spec.ErrDNSRecordNotFound
 			return
 		}
-		err = spec.ErrDNSRecordNotFound
+		conn, err = (&net.Dialer{}).DialContext(ctx, network, serverIPAddr)
 		return
 	}
-	c.httpClient = &http.Client{
+	c.directHttpClient = &http.Client{
 		Transport: &http.Transport{
-			DialContext: c.netDial,
+			DialContext: c.directNetDial,
 		},
 	}
 	return c, nil
@@ -155,12 +143,12 @@ func (c *TohClient) LookupIP(host string) (ips []net.IP, err error) {
 
 // LookupIP4 lookup only ipv4
 func (c *TohClient) LookupIP4(host string) (ips []net.IP, err error) {
-	return c.resolver.LookupIP(host, dns.TypeA)
+	return c.proxyDNSResolver.LookupIP(host, dns.TypeA)
 }
 
 // LookupIP4 lookup only ipv6
 func (c *TohClient) LookupIP6(host string) (ips []net.IP, err error) {
-	return c.resolver.LookupIP(host, dns.TypeAAAA)
+	return c.proxyDNSResolver.LookupIP(host, dns.TypeAAAA)
 }
 
 func (c *TohClient) DialTCP(ctx context.Context, addr string) (net.Conn, error) {
@@ -200,7 +188,7 @@ func (c *TohClient) Stats() (s *api.Stats, err error) {
 	apiUrl := fmt.Sprintf("%s://%s/stats", scheme, u.Host)
 	req, err := http.NewRequest(http.MethodGet, apiUrl, nil)
 	req.Header.Add(spec.HeaderHandshakeKey, c.options.Key)
-	resp, err := c.httpClient.Do(req)
+	resp, err := c.directHttpClient.Do(req)
 	if err != nil {
 		return
 	}
@@ -291,7 +279,7 @@ func (c *TohClient) dialWS(ctx context.Context, urlstr string, header http.Heade
 	respHeader = http.Header{}
 	var statusCode int
 	dialer := ws.Dialer{
-		NetDial: c.netDial,
+		NetDial: c.directNetDial,
 		Header:  ws.HandshakeHeaderHTTP(header),
 		OnHeader: func(key, value []byte) (err error) {
 			respHeader.Add(string(key), string(value))
