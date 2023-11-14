@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math/rand"
 	"net"
 	"net/http"
 	"net/url"
@@ -92,16 +91,21 @@ func NewTohClient(options Options) (*TohClient, error) {
 			case <-ipv6Ok:
 			}
 		}
-		var serverIPAddr string
-		if len(c.serverIPv6s) > 0 { // ipv6 first
-			serverIPAddr = net.JoinHostPort(c.serverIPv6s[rand.Intn(len(c.serverIPv6s))].String(), c.serverPort)
-		} else if len(c.serverIPv4s) > 0 { // fallback to ipv4
-			serverIPAddr = net.JoinHostPort(c.serverIPv4s[rand.Intn(len(c.serverIPv4s))].String(), c.serverPort)
-		} else {
-			err = spec.ErrDNSRecordNotFound
-			return
+		for _, addr := range c.serverIPv6s { // ipv6 first
+			conn, err = (&net.Dialer{}).DialContext(ctx, network, net.JoinHostPort(addr.String(), c.serverPort))
+			if err == nil {
+				return
+			}
 		}
-		conn, err = (&net.Dialer{}).DialContext(ctx, network, serverIPAddr)
+		for _, addr := range c.serverIPv6s { // fallback to ipv4
+			conn, err = (&net.Dialer{}).DialContext(ctx, network, net.JoinHostPort(addr.String(), c.serverPort))
+			if err == nil {
+				return
+			}
+		}
+		if err == nil {
+			err = spec.ErrDNSRecordNotFound
+		}
 		return
 	}
 	c.directHttpClient = &http.Client{
