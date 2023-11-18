@@ -24,7 +24,6 @@ import (
 
 type TohClient struct {
 	options          Options
-	connIdleTimeout  time.Duration
 	directNetDial    func(ctx context.Context, network, addr string) (conn net.Conn, err error)
 	directHttpClient *http.Client
 	serverIPv4s      []net.IP
@@ -32,6 +31,7 @@ type TohClient struct {
 	serverPort       string
 	dnsClient        *dns.Client
 	proxyDNSResolver *D.Resolver
+	conntrack        *Conntrack
 }
 
 type Options struct {
@@ -45,9 +45,9 @@ func NewTohClient(options Options) (*TohClient, error) {
 		return nil, fmt.Errorf("invalid server addr, %s", err.Error())
 	}
 	c := &TohClient{
-		options:         options,
-		dnsClient:       &dns.Client{},
-		connIdleTimeout: 75 * time.Second,
+		options:   options,
+		dnsClient: &dns.Client{},
+		conntrack: NewConntrack(),
 	}
 	c.proxyDNSResolver = &D.Resolver{
 		IPv4Servers: D.DefaultResolver.IPv4Servers,
@@ -203,6 +203,10 @@ func (c *TohClient) Stats() (s *api.Stats, err error) {
 	return
 }
 
+func (c *TohClient) Conntrack() *Conntrack {
+	return c.conntrack
+}
+
 func (c *TohClient) dnsExchange(dnServer string, query *dns.Msg) (resp *dns.Msg, err error) {
 	dnsLookupCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
 	defer cancel()
@@ -237,7 +241,6 @@ func (c *TohClient) dial(ctx context.Context, network, addr string) (
 	}
 	logrus.Debugf("%s://%s established successfully, toh latency %s", network, addr, time.Since(t1))
 
-	go c.newPingLoop(conn.(*wsConn))
 	estAddr := respHeader.Get(spec.HeaderEstablishAddr)
 	if len(estAddr) == 0 {
 		estAddr = "0.0.0.0:0"
@@ -258,25 +261,11 @@ func (c *TohClient) dial(ctx context.Context, network, addr string) (
 	default:
 		err = spec.ErrUnsupportNetwork
 	}
+	conn.(*wsConn).entry.RemoteAddr = remoteAddr.String()
+	conn.(*wsConn).entry.RemoteHost = addr
+	conn.(*wsConn).entry.Proto = network
+	go conn.(*wsConn).runPingLoop()
 	return
-}
-
-func (c *TohClient) newPingLoop(wsConn *wsConn) {
-	if c.options.Keepalive == 0 {
-		return
-	}
-	for {
-		time.Sleep(c.options.Keepalive)
-		if time.Since(wsConn.lastActiveTime) > c.connIdleTimeout {
-			logrus.Debug("ping: exited. connection reached the max idle time ", c.connIdleTimeout)
-			break
-		}
-		err := wsConn.Ping()
-		if err != nil {
-			logrus.Debug("ping: ", err)
-			break
-		}
-	}
 }
 
 func (c *TohClient) dialWS(ctx context.Context, urlstr string, header http.Header) (
@@ -314,22 +303,30 @@ func (c *TohClient) dialWS(ctx context.Context, urlstr string, header http.Heade
 		return
 	}
 	wsc = &wsConn{
-		conn: conn,
-		// Use the nonce returned by the server (some older versions of servers do not support nonce)
-		nonce:          spec.MustParseNonce(respHeader.Get(spec.HeaderHandshakeNonce)),
-		lastActiveTime: time.Now(),
+		conn:            conn,
+		keepalive:       c.options.Keepalive,
+		connIdleTimeout: 75 * time.Second,
+		entry: &ConnEntry{
+			// Use the nonce returned by the server (some older versions of servers do not support nonce)
+			Nonce:      spec.MustParseNonce(respHeader.Get(spec.HeaderHandshakeNonce)),
+			LocalAddr:  conn.LocalAddr().String(),
+			lastRWTime: time.Now(),
+			ct:         c.conntrack,
+		},
 	}
+	wsc.entry.add()
 	return
 }
 
 type wsConn struct {
-	conn           net.Conn
-	nonce          byte
-	lastActiveTime time.Time
+	conn            net.Conn
+	keepalive       time.Duration
+	connIdleTimeout time.Duration
+	entry           *ConnEntry
 }
 
 func (c *wsConn) Read(ctx context.Context) (b []byte, err error) {
-	c.lastActiveTime = time.Now()
+	c.entry.lastRWTime = time.Now()
 	if dl, ok := ctx.Deadline(); ok {
 		c.conn.SetReadDeadline(dl)
 	}
@@ -338,17 +335,17 @@ func (c *wsConn) Read(ctx context.Context) (b []byte, err error) {
 		return
 	}
 	for i, v := range b {
-		b[i] = v ^ c.nonce
+		b[i] = v ^ c.entry.Nonce
 	}
 	return
 }
 func (c *wsConn) Write(ctx context.Context, p []byte) error {
-	c.lastActiveTime = time.Now()
+	c.entry.lastRWTime = time.Now()
 	if dl, ok := ctx.Deadline(); ok {
 		c.conn.SetWriteDeadline(dl)
 	}
 	for i, v := range p {
-		p[i] = v ^ c.nonce
+		p[i] = v ^ c.entry.Nonce
 	}
 	return wsutil.WriteClientBinary(c.conn, p)
 }
@@ -359,9 +356,29 @@ func (c *wsConn) LocalAddr() net.Addr {
 
 func (c *wsConn) Close(code int, reason string) error {
 	ws.WriteFrame(c.conn, ws.NewCloseFrame(ws.NewCloseFrameBody(ws.StatusCode(code), reason)))
+	c.entry.remove()
 	return c.conn.Close()
 }
 
 func (c *wsConn) Ping() error {
 	return wsutil.WriteClientMessage(c.conn, ws.OpPing, ws.NewPingFrame([]byte{}).Payload)
+}
+
+// runPingLoop keepalive the websocket connection
+func (c *wsConn) runPingLoop() {
+	if c.keepalive == 0 {
+		return
+	}
+	for {
+		time.Sleep(c.keepalive)
+		if time.Since(c.entry.lastRWTime) > c.connIdleTimeout {
+			logrus.Debug("ping: exited. connection reached the max idle time ", c.connIdleTimeout)
+			break
+		}
+		err := c.Ping()
+		if err != nil {
+			logrus.Debug("ping: ", err)
+			break
+		}
+	}
 }
