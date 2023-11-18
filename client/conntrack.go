@@ -6,7 +6,7 @@ import (
 )
 
 type ConnEntry struct {
-	Proto      string `json:"Proto"`
+	Proto      string `json:"proto"`
 	LocalAddr  string `json:"localAddr"`
 	RemoteAddr string `json:"remoteAddr"`
 	RemoteHost string `json:"remoteHost"`
