@@ -6,13 +6,15 @@ import (
 	"sort"
 	"time"
 
+	"github.com/rkonfj/toh/client"
 	"github.com/rkonfj/toh/server/api"
 )
 
 type ServerInfo struct {
-	Name    string     `json:"name"`
-	Latency *Latency   `json:"latency"`
-	Limit   *api.Stats `json:"limit"`
+	Name      string             `json:"name"`
+	Latency   *Latency           `json:"latency"`
+	Limit     *api.Stats         `json:"limit"`
+	Conntrack []client.ConnEntry `json:"conntrack"`
 }
 
 type Latency struct {
@@ -44,9 +46,10 @@ func (s *S5Server) handleListServers(w http.ResponseWriter, r *http.Request) {
 	servers := make([]ServerInfo, 0)
 	for _, ser := range s.servers {
 		servers = append(servers, ServerInfo{
-			Name:    ser.name,
-			Latency: &Latency{IPv4: ser.latency, IPv6: ser.latencyIPv6},
-			Limit:   ser.limit,
+			Name:      ser.name,
+			Latency:   &Latency{IPv4: ser.latency, IPv6: ser.latencyIPv6},
+			Limit:     ser.limit,
+			Conntrack: ser.client.Conntrack().List(),
 		})
 	}
 	json.NewEncoder(w).Encode(servers)
@@ -64,9 +67,10 @@ func (s *S5Server) handleListGroups(w http.ResponseWriter, r *http.Request) {
 		})
 		for _, ser := range s {
 			servers = append(servers, ServerInfo{
-				Name:    ser.name,
-				Latency: &Latency{IPv4: ser.latency, IPv6: ser.latencyIPv6},
-				Limit:   ser.limit,
+				Name:      ser.name,
+				Latency:   &Latency{IPv4: ser.latency, IPv6: ser.latencyIPv6},
+				Limit:     ser.limit,
+				Conntrack: ser.client.Conntrack().List(),
 			})
 		}
 		groups = append(groups, GroupInfo{

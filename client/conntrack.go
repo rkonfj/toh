@@ -6,11 +6,11 @@ import (
 )
 
 type ConnEntry struct {
-	Proto      string
-	LocalAddr  string
-	RemoteAddr string
-	RemoteHost string
-	Nonce      byte
+	Proto      string `json:"Proto"`
+	LocalAddr  string `json:"localAddr"`
+	RemoteAddr string `json:"remoteAddr"`
+	RemoteHost string `json:"remoteHost"`
+	Nonce      byte   `json:"nonce"`
 	lastRWTime time.Time
 	ct         *Conntrack
 }
