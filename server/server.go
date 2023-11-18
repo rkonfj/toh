@@ -73,6 +73,7 @@ func (s *TohServer) handleUpgradeWebSocket(w http.ResponseWriter, r *http.Reques
 	key := r.Header.Get(spec.HeaderHandshakeKey)
 	network := r.Header.Get(spec.HeaderHandshakeNet)
 	addr := r.Header.Get(spec.HeaderHandshakeAddr)
+	nonce := r.Header.Get(spec.HeaderHandshakeNonce)
 	clientIP := spec.RealIP(r)
 
 	if err := s.acl.Check(key, network, addr); err != nil {
@@ -91,7 +92,8 @@ func (s *TohServer) handleUpgradeWebSocket(w http.ResponseWriter, r *http.Reques
 	}
 
 	upgradeHeader := http.Header{}
-	upgradeHeader.Add(spec.HeaderEstablishAddr, netConn.RemoteAddr().String())
+	upgradeHeader.Add(spec.HeaderEstablishAddr, netConn.RemoteAddr().String()) // remote addr
+	upgradeHeader.Add(spec.HeaderHandshakeNonce, nonce)                        // nonce ack to client
 	conn, _, _, err := ws.HTTPUpgrader{Header: upgradeHeader}.Upgrade(r, w)
 	if err != nil {
 		logrus.Error(err)
@@ -99,7 +101,7 @@ func (s *TohServer) handleUpgradeWebSocket(w http.ResponseWriter, r *http.Reques
 	}
 
 	go func() {
-		lbc, rbc := s.pipe(spec.NewConn(&wsConn{conn: conn}, conn.RemoteAddr()), netConn)
+		lbc, rbc := s.pipe(spec.NewConn(&wsConn{conn: conn, nonce: spec.MustParseNonce(nonce)}, conn.RemoteAddr()), netConn)
 		s.trafficEventChan <- &TrafficEvent{
 			In:         lbc,
 			Out:        rbc,
@@ -144,18 +146,29 @@ func (s *TohServer) runShutdownListener() {
 }
 
 type wsConn struct {
-	conn net.Conn
+	conn  net.Conn
+	nonce byte
 }
 
 func (c *wsConn) Read(ctx context.Context) (b []byte, err error) {
 	if dl, ok := ctx.Deadline(); ok {
 		c.conn.SetReadDeadline(dl)
 	}
-	return wsutil.ReadClientBinary(c.conn)
+	b, err = wsutil.ReadClientBinary(c.conn)
+	if err != nil {
+		return
+	}
+	for i, v := range b {
+		b[i] = v ^ c.nonce
+	}
+	return
 }
 func (c *wsConn) Write(ctx context.Context, p []byte) error {
 	if dl, ok := ctx.Deadline(); ok {
 		c.conn.SetWriteDeadline(dl)
+	}
+	for i, v := range p {
+		p[i] = v ^ c.nonce
 	}
 	return wsutil.WriteServerBinary(c.conn, p)
 }

@@ -31,15 +31,17 @@ var (
 
 	ErrUnsupportNetwork = errors.New("unsupport network")
 
-	HeaderHandshakeKey  = "X-Toh-Key"
-	HeaderHandshakeNet  = "X-Toh-Net"
-	HeaderHandshakeAddr = "X-Toh-Addr"
-	HeaderEstablishAddr = "X-Toh-EstAddr"
+	HeaderHandshakeKey   = "X-Toh-Key"
+	HeaderHandshakeNet   = "X-Toh-Net"
+	HeaderHandshakeAddr  = "X-Toh-Addr"
+	HeaderHandshakeNonce = "X-Toh-Nonce"
+	HeaderEstablishAddr  = "X-Toh-EstAddr"
 )
 
 // Dial describe the dial func
 type Dial func(ctx context.Context, addr string) (net.Conn, error)
 
+// ConfigFileWriter a writer that writes to both files and stdout
 type ConfigFileWriter struct {
 	f *os.File
 }

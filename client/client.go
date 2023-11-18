@@ -222,6 +222,7 @@ func (c *TohClient) dial(ctx context.Context, network, addr string) (
 	handshake.Add(spec.HeaderHandshakeKey, c.options.Key)
 	handshake.Add(spec.HeaderHandshakeNet, network)
 	handshake.Add(spec.HeaderHandshakeAddr, addr)
+	handshake.Add(spec.HeaderHandshakeNonce, spec.NewNonce())
 	for k, v := range c.options.Headers {
 		for _, item := range v {
 			handshake.Add(k, item)
@@ -313,7 +314,9 @@ func (c *TohClient) dialWS(ctx context.Context, urlstr string, header http.Heade
 		return
 	}
 	wsc = &wsConn{
-		conn:           conn,
+		conn: conn,
+		// Use the nonce returned by the server (some older versions of servers do not support nonce)
+		nonce:          spec.MustParseNonce(respHeader.Get(spec.HeaderHandshakeNonce)),
 		lastActiveTime: time.Now(),
 	}
 	return
@@ -321,6 +324,7 @@ func (c *TohClient) dialWS(ctx context.Context, urlstr string, header http.Heade
 
 type wsConn struct {
 	conn           net.Conn
+	nonce          byte
 	lastActiveTime time.Time
 }
 
@@ -329,12 +333,22 @@ func (c *wsConn) Read(ctx context.Context) (b []byte, err error) {
 	if dl, ok := ctx.Deadline(); ok {
 		c.conn.SetReadDeadline(dl)
 	}
-	return wsutil.ReadServerBinary(c.conn)
+	b, err = wsutil.ReadServerBinary(c.conn)
+	if err != nil {
+		return
+	}
+	for i, v := range b {
+		b[i] = v ^ c.nonce
+	}
+	return
 }
 func (c *wsConn) Write(ctx context.Context, p []byte) error {
 	c.lastActiveTime = time.Now()
 	if dl, ok := ctx.Deadline(); ok {
 		c.conn.SetWriteDeadline(dl)
+	}
+	for i, v := range p {
+		p[i] = v ^ c.nonce
 	}
 	return wsutil.WriteClientBinary(c.conn, p)
 }
