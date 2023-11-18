@@ -97,7 +97,7 @@ func NewTohClient(options Options) (*TohClient, error) {
 				return
 			}
 		}
-		for _, addr := range c.serverIPv6s { // fallback to ipv4
+		for _, addr := range c.serverIPv4s { // fallback to ipv4
 			conn, err = (&net.Dialer{}).DialContext(ctx, network, net.JoinHostPort(addr.String(), c.serverPort))
 			if err == nil {
 				return
