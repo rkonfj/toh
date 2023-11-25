@@ -12,7 +12,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -22,7 +21,6 @@ import (
 	"github.com/rkonfj/toh/client"
 	D "github.com/rkonfj/toh/dns"
 	"github.com/rkonfj/toh/ruleset"
-	"github.com/rkonfj/toh/server/api"
 	"github.com/rkonfj/toh/socks5"
 	"github.com/rkonfj/toh/spec"
 	"github.com/sirupsen/logrus"
@@ -49,105 +47,12 @@ type Options struct {
 type S5Server struct {
 	opts                       Options
 	socks5Opts                 socks5.Options
-	servers                    []*Server
+	servers                    servers
 	groups                     []*Group
 	defaultDialer              net.Dialer
 	geoip2db                   *geoip2.Reader
 	dns                        *D.LocalDNS
 	localNetIPv4, localNetIPv6 bool
-}
-
-type Server struct {
-	name        string
-	client      *client.TohClient
-	httpIPv4    *http.Client
-	httpIPv6    *http.Client
-	httpClient  *http.Client
-	ruleset     *ruleset.Ruleset
-	latency     time.Duration
-	latencyIPv6 time.Duration
-	limit       *api.Stats
-}
-
-func (s *Server) limited() bool {
-	if s.limit == nil {
-		return false
-	}
-	if s.limit.Status == "" {
-		return false
-	}
-	return s.limit.Status != "ok"
-}
-
-func (s *Server) ipv6Enabled() bool {
-	return s.latencyIPv6 < s.httpClient.Timeout
-}
-
-func (s *Server) ipv4Enabled() bool {
-	return s.latency < s.httpClient.Timeout
-}
-
-func (s *Server) healthcheck(urls []string) {
-	if len(urls) == 0 {
-		s.latency = time.Duration(0)
-		s.latencyIPv6 = time.Duration(0)
-		return
-	}
-	for {
-		var errIPv4, errIPv6 error
-		for _, url := range urls {
-			t1 := time.Now()
-			_, errIPv4 = s.httpIPv4.Get(url)
-			if errIPv4 == nil {
-				s.latency = time.Since(t1)
-				break
-			}
-		}
-		if errIPv4 != nil {
-			s.latency = s.httpClient.Timeout
-		}
-
-		for _, url := range urls {
-			t2 := time.Now()
-			_, errIPv6 = s.httpIPv6.Get(url)
-			if errIPv6 == nil {
-				s.latencyIPv6 = time.Since(t2)
-				break
-			}
-		}
-		if errIPv6 != nil {
-			s.latencyIPv6 = s.httpClient.Timeout
-		}
-
-		time.Sleep(30 * time.Second)
-	}
-}
-
-func (s *Server) updateStats() {
-	for {
-		s.limit, _ = s.client.Stats()
-		time.Sleep(15 * time.Second)
-	}
-}
-
-type Group struct {
-	name    string
-	servers []*Server
-	ruleset *ruleset.Ruleset
-	lb      string
-	next    int
-}
-
-func (g *Group) selectServer() *Server {
-	switch g.lb {
-	case "rr":
-		// round robin
-		g.next = (g.next + 1) % len(g.servers)
-		return g.servers[g.next]
-	default:
-		// best latency
-		return selectServer(g.servers)
-	}
 }
 
 func NewS5Server(opts Options) (s5Server *S5Server, err error) {
@@ -294,7 +199,7 @@ func (s *S5Server) loadGroups() (err error) {
 		}
 		if g.Ruleset != nil {
 			group.ruleset, err = ruleset.Parse(g.Name, s.opts.DataRoot, g.Ruleset,
-				selectServer(group.servers).client.DialContext)
+				group.servers.bestLatency().client.DialContext)
 			if err != nil {
 				return
 			}
@@ -438,7 +343,7 @@ func (s *S5Server) openGeoip2() {
 			logrus.Errorf("geoip2 open faild: %s", err.Error())
 			return
 		}
-		downloadGeoip2DB(selectServer(s.servers).httpClient, geoip2Path)
+		downloadGeoip2DB(s.servers.bestLatency().httpClient, geoip2Path)
 		s.openGeoip2()
 		return
 	}
@@ -535,27 +440,6 @@ func newHTTPClient(lookupIP func(host string) (ips []net.IP, err error)) *http.C
 			},
 		},
 	}
-}
-
-// selectServer select a best latency  proxy server from servers
-func selectServer(servers []*Server) *Server {
-	var s []*Server
-	for _, server := range servers {
-		if server.limited() {
-			continue
-		}
-		s = append(s, server)
-	}
-	sort.Slice(s, func(i, j int) bool {
-		if s[i].latencyIPv6 == s[j].latencyIPv6 {
-			return s[i].latency < s[j].latency
-		}
-		return s[i].latencyIPv6 < s[j].latencyIPv6
-	})
-	if len(s) == 0 {
-		return servers[0]
-	}
-	return s[0]
 }
 
 // downloadGeoip2DB download geoip2 db from github
