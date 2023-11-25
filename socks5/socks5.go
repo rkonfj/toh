@@ -19,13 +19,12 @@ type Options struct {
 	UDPDialContext func(ctx context.Context, addr string) (
 		dialerName string, conn net.Conn, err error)
 	TrafficEventConsumer func(e *spec.TrafficEvent)
-	HTTPHandlers         map[string]Handler
 }
 
 type Socks5Server struct {
-	opts            Options
-	pipeEngine      *spec.PipeEngine
-	httpProxyServer *HTTPProxyServer
+	opts       Options
+	pipeEngine *spec.PipeEngine
+	httpServer *HttpServer
 }
 
 func NewSocks5Server(opts Options) (s *Socks5Server, err error) {
@@ -46,9 +45,15 @@ func NewSocks5Server(opts Options) (s *Socks5Server, err error) {
 	pipeEngine := spec.NewPipeEngine()
 	pipeEngine.AddEventConsumer(opts.TrafficEventConsumer)
 	s = &Socks5Server{
-		opts:            opts,
-		pipeEngine:      pipeEngine,
-		httpProxyServer: &HTTPProxyServer{opts: opts, pipeEngine: pipeEngine},
+		opts:       opts,
+		pipeEngine: pipeEngine,
+		httpServer: &HttpServer{
+			pipeEngine:     pipeEngine,
+			dialTCPContext: opts.TCPDialContext,
+			advertiseIP:    opts.AdvertiseIP,
+			advertisePort:  opts.AdvertisePort,
+			httpHandlers:   make(map[string]Handler),
+		},
 	}
 	return
 }
@@ -86,6 +91,10 @@ func (s *Socks5Server) Run() error {
 	}
 }
 
+func (s *Socks5Server) HttpServer() *HttpServer {
+	return s.httpServer
+}
+
 func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (
 	dialerName string, netConn net.Conn) {
 	log := logrus.WithField(spec.AppAddr.String(), ctx.Value(spec.AppAddr))
@@ -104,12 +113,12 @@ func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (
 		return
 	}
 
-	if buf[0] != 5 {
-		if buf[0] >= 65 {
+	if buf[0] != 5 { // non socks5 proto
+		if buf[0] >= 65 { // try process as http proto
 			closeConn = false
 			b := make([]byte, 2)
 			copy(b, buf[:2])
-			go s.httpProxyServer.handle(b, conn)
+			go s.httpServer.handleRawRequest(&protoDetectionConnWrapper{Conn: conn, detectBytes: b})
 			return
 		}
 		log.Debug("unsupport socks version, closed")

@@ -15,33 +15,22 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type HTTPProxyServer struct {
-	opts       Options
-	pipeEngine *spec.PipeEngine
-}
-
 type Handler func(w http.ResponseWriter, r *http.Request)
 
-type protocolDetectionConnWrapper struct {
-	net.Conn
-	b []byte
+type HttpServer struct {
+	dialTCPContext func(ctx context.Context, addr string) (
+		dialerName string, conn net.Conn, err error)
+	pipeEngine    *spec.PipeEngine
+	httpHandlers  map[string]Handler
+	advertiseIP   string
+	advertisePort uint16
 }
 
-func (c *protocolDetectionConnWrapper) Read(b []byte) (n int, err error) {
-	if c.b != nil {
-		n = copy(b, c.b)
-		if n < len(c.b) {
-			c.b = c.b[n:]
-		} else {
-			c.b = nil
-		}
-		return
-	}
-	return c.Conn.Read(b)
+func (s *HttpServer) Route(path string, handler Handler) {
+	s.httpHandlers[path] = handler
 }
 
-func (s *HTTPProxyServer) handle(b []byte, originConn net.Conn) {
-	conn := &protocolDetectionConnWrapper{Conn: originConn, b: b}
+func (s *HttpServer) handleRawRequest(conn net.Conn) {
 	closeConn := true
 	defer func() {
 		if closeConn {
@@ -68,11 +57,12 @@ func (s *HTTPProxyServer) handle(b []byte, originConn net.Conn) {
 			addr += ":80"
 		}
 
-		// pac script
-		if ip := net.ParseIP(host); ip != nil &&
-			(ip.IsLoopback() || (ip.IsPrivate() && port ==
-				fmt.Sprintf("%d", s.opts.AdvertisePort))) {
-			if h, ok := s.opts.HTTPHandlers[request.URL.Path]; ok {
+		// loopback ip or private ip response pac script or handle custom handlers
+		if remoteIP := net.ParseIP(host); remoteIP != nil &&
+			(remoteIP.IsLoopback() || (remoteIP.IsPrivate() && port ==
+				fmt.Sprintf("%d", s.advertisePort))) {
+			// custom handlers
+			if h, ok := s.httpHandlers[request.URL.Path]; ok {
 				w := newResponseWriter(conn)
 				h(w, request)
 				err := w.write()
@@ -81,19 +71,20 @@ func (s *HTTPProxyServer) handle(b []byte, originConn net.Conn) {
 				}
 				continue
 			}
+			// pac script
 			s.responsePacScript(conn, addr)
 			continue
 		}
 
 		ctx := context.WithValue(context.Background(), spec.AppAddr, conn.RemoteAddr().String())
-		dialerName, httpConn, err := s.opts.TCPDialContext(ctx, addr)
+		dialerName, httpConn, err := s.dialTCPContext(ctx, addr)
 		if err != nil {
 			logrus.Error(err)
 			continue
 		}
 
+		// https_proxy
 		if request.Method == http.MethodConnect {
-			// https_proxy
 			_, err = conn.Write([]byte("HTTP/1.1 200 Connection established\r\n\r\n"))
 			if err != nil {
 				logrus.Error(err)
@@ -114,16 +105,16 @@ func (s *HTTPProxyServer) handle(b []byte, originConn net.Conn) {
 		}
 
 		go s.pipeEngine.Pipe(dialerName,
-			&protocolDetectionConnWrapper{Conn: conn, b: buf.Bytes()}, httpConn)
+			&protoDetectionConnWrapper{Conn: conn, detectBytes: buf.Bytes()}, httpConn)
 		closeConn = false
 		break
 	}
 }
 
-func (s *HTTPProxyServer) responsePacScript(w io.Writer, referAddr string) {
+func (s *HttpServer) responsePacScript(w io.Writer, referAddr string) {
 	pacScriptServer := referAddr
-	if !net.ParseIP(s.opts.AdvertiseIP).IsLoopback() {
-		pacScriptServer = fmt.Sprintf("%s:%d", s.opts.AdvertiseIP, s.opts.AdvertisePort)
+	if !net.ParseIP(s.advertiseIP).IsLoopback() {
+		pacScriptServer = fmt.Sprintf("%s:%d", s.advertiseIP, s.advertisePort)
 	}
 	content := fmt.Sprintf("// give me a star please: https://github.com/rkonfj/toh\n\n"+
 		"function FindProxyForURL(url, host) {\n"+

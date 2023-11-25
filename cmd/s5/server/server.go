@@ -45,13 +45,13 @@ type Options struct {
 }
 
 type S5Server struct {
+	server                     *socks5.Socks5Server
+	dns                        *D.LocalDNS
 	opts                       Options
-	socks5Opts                 socks5.Options
 	servers                    servers
 	groups                     []*Group
 	defaultDialer              net.Dialer
 	geoip2db                   *geoip2.Reader
-	dns                        *D.LocalDNS
 	localNetIPv4, localNetIPv6 bool
 }
 
@@ -66,22 +66,9 @@ func NewS5Server(opts Options) (s5Server *S5Server, err error) {
 		localNetIPv6:  true,
 	}
 
-	s5Server.socks5Opts = socks5.Options{
-		Listen:               opts.Cfg.Listen,
-		TCPDialContext:       s5Server.dialTCP,
-		UDPDialContext:       s5Server.dialUDP,
-		TrafficEventConsumer: logTrafficEvent,
-		HTTPHandlers:         make(map[string]socks5.Handler),
-	}
-
-	if opts.Cfg.Advertise != nil {
-		s5Server.socks5Opts.AdvertiseIP = opts.Cfg.Advertise.IP
-		s5Server.socks5Opts.AdvertisePort = opts.Cfg.Advertise.Port
-	}
-
-	// overwrite config from command line flag
-	if len(opts.Listen) > 0 {
-		s5Server.socks5Opts.Listen = opts.Listen
+	err = s5Server.buildCoreServer()
+	if err != nil {
+		return
 	}
 
 	// use proxy server to exchange dns message
@@ -106,22 +93,44 @@ func NewS5Server(opts Options) (s5Server *S5Server, err error) {
 
 	logrus.Infof("total loaded %d proxy servers and %d groups",
 		len(s5Server.servers), len(s5Server.groups))
+	return
+}
 
-	s5Server.registerHTTPHandlers()
+func (s *S5Server) buildCoreServer() (err error) {
+	socks5Opts := socks5.Options{
+		Listen:               s.opts.Cfg.Listen,
+		TCPDialContext:       s.dialTCP,
+		UDPDialContext:       s.dialUDP,
+		TrafficEventConsumer: logTrafficEvent,
+	}
+
+	if s.opts.Cfg.Advertise != nil {
+		socks5Opts.AdvertiseIP = s.opts.Cfg.Advertise.IP
+		socks5Opts.AdvertisePort = s.opts.Cfg.Advertise.Port
+	}
+
+	// overwrite config from command line flag
+	if len(s.opts.Listen) > 0 {
+		socks5Opts.Listen = s.opts.Listen
+	}
+
+	s.server, err = socks5.NewSocks5Server(socks5Opts)
+	if err != nil {
+		return
+	}
+	s.server.HttpServer().Route("/localnet", s.handleLocalNet)
+	s.server.HttpServer().Route("/servers", s.handleListServers)
+	s.server.HttpServer().Route("/groups", s.handleListGroups)
+	s.server.HttpServer().Route("/outbound", s.handleOutbound)
 	return
 }
 
 func (s *S5Server) Run() error {
-	ss, err := socks5.NewSocks5Server(s.socks5Opts)
-	if err != nil {
-		return err
-	}
-
 	go s.openGeoip2()
 	go s.dns.Run()
 	go s.watchSignal()
 	go s.localAddrFamilyDetection()
-	return ss.Run()
+	return s.server.Run()
 }
 
 func (s *S5Server) loadServers() (err error) {
@@ -216,13 +225,6 @@ func (s *S5Server) printRulesetStats() {
 	for _, g := range s.groups {
 		g.ruleset.PrintStats()
 	}
-}
-
-func (s *S5Server) registerHTTPHandlers() {
-	s.socks5Opts.HTTPHandlers["/localnet"] = s.handleLocalNet
-	s.socks5Opts.HTTPHandlers["/servers"] = s.handleListServers
-	s.socks5Opts.HTTPHandlers["/groups"] = s.handleListGroups
-	s.socks5Opts.HTTPHandlers["/outbound"] = s.handleOutbound
 }
 
 func (s *S5Server) dial(ctx context.Context, addr, network string) (
