@@ -14,14 +14,14 @@ type AdminAPI struct {
 	ACL *acl.ACL
 }
 
-func (s *AdminAPI) Register() {
+func (s *AdminAPI) Register(mux *http.ServeMux) {
 	if !s.ACL.AdminEnabled() {
 		return
 	}
-	http.HandleFunc("/admin/acl/key", s.withAuth(s.HandleKey))
-	http.HandleFunc("/admin/acl/limit", s.withAuth(s.HandleLimit))
-	http.HandleFunc("/admin/acl/usage", s.withAuth(s.HandleUsage))
-	http.HandleFunc("/admin/acl", s.withAuth(s.HandleShowACL))
+	mux.HandleFunc("/admin/acl/key", s.withAuth(s.HandleKey))
+	mux.HandleFunc("/admin/acl/limit", s.withAuth(s.HandleLimit))
+	mux.HandleFunc("/admin/acl/usage", s.withAuth(s.HandleUsage))
+	mux.HandleFunc("/admin/acl", s.withAuth(s.HandleShowACL))
 	logrus.Info("admin api(/admin/**) is enabled")
 }
 

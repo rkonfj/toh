@@ -18,6 +18,7 @@ func init() {
 	Cmd.Flags().String("acl", "acl.json", "file containing access control rules")
 	Cmd.Flags().String("admin-key", "", "key to access the admin api (leave blank to disable admin api)")
 	Cmd.Flags().String("copy-buf", "32ki", "buffer size for copying network data")
+	Cmd.Flags().Bool("debug-mode", false, "run in debug mode (for developers)")
 	Cmd.Flags().StringP("listen", "l", "127.0.0.1:9986", "http server listen address")
 }
 
@@ -44,6 +45,10 @@ func processServerOptions(cmd *cobra.Command) (options server.Options, err error
 		return
 	}
 	options.AdminKey, err = cmd.Flags().GetString("admin-key")
+	if err != nil {
+		return
+	}
+	options.DebugMode, err = cmd.Flags().GetBool("debug-mode")
 	if err != nil {
 		return
 	}
