@@ -3,6 +3,8 @@ package client
 import (
 	"sync"
 	"time"
+
+	"github.com/sirupsen/logrus"
 )
 
 type ConnEntry struct {
@@ -17,10 +19,12 @@ type ConnEntry struct {
 
 func (c *ConnEntry) add() {
 	c.ct.addConn(c)
+	logrus.Debugf("tracking %s://%s", c.Proto, c.RemoteAddr)
 }
 
 func (c *ConnEntry) remove() {
 	c.ct.removeConn(c)
+	logrus.Debugf("stop tracking %s://%s", c.Proto, c.RemoteAddr)
 }
 
 type Conntrack struct {

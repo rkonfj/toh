@@ -6,8 +6,6 @@ import (
 	"net"
 	"net/http"
 	"strings"
-
-	"github.com/sirupsen/logrus"
 )
 
 func Uint16ToBytes(n uint16) []byte {
@@ -32,16 +30,16 @@ func BytesToUint16(bys []byte) uint16 {
 func RealIP(r *http.Request) string {
 	realIP := r.Header.Get("X-Real-IP")
 	if realIP != "" {
-		logrus.Debugf("resolve real ip from X-Real-IP: %s", realIP)
+		defaultLogger.Debug("real ip resolved", "from", "X-Real-IP", "ip", realIP)
 		return realIP
 	}
 	xff := r.Header.Get("X-Forwarded-For")
 	if xff != "" {
-		logrus.Debugf("resolve real ip from X-Forwarded-For: %s", realIP)
+		defaultLogger.Debug("real ip resolved", "from", "X-Forwarded-For", "ip", realIP)
 		return strings.Split(strings.TrimSpace(xff), ",")[0]
 	}
 
 	tcpAddr, _ := net.ResolveTCPAddr("tcp", r.RemoteAddr)
-	logrus.Debugf("resolve real ip from remote addr: %s", tcpAddr.IP.String())
+	defaultLogger.Debug("real ip resolved", "from", "RemoteAddr", "ip", tcpAddr.IP)
 	return tcpAddr.IP.String()
 }

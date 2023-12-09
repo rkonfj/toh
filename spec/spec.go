@@ -3,9 +3,7 @@ package spec
 import (
 	"context"
 	"errors"
-	"io"
 	"net"
-	"strings"
 	"sync"
 	"time"
 )
@@ -67,10 +65,6 @@ func (c *Conn) Read(b []byte) (n int, err error) {
 
 	wsb, err := c.conn.Read(ctx)
 	if err != nil {
-		if strings.Contains(err.Error(), "StatusNormalClosure") ||
-			strings.Contains(err.Error(), "1000") {
-			return 0, io.EOF
-		}
 		return 0, err
 	}
 

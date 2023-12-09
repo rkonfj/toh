@@ -3,9 +3,7 @@ package client
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -13,12 +11,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gobwas/ws"
-	"github.com/gobwas/ws/wsutil"
+	"github.com/gorilla/websocket"
 	"github.com/miekg/dns"
 	D "github.com/rkonfj/toh/dns"
 	"github.com/rkonfj/toh/server/api"
 	"github.com/rkonfj/toh/spec"
+	"github.com/rkonfj/toh/ws"
 	"github.com/sirupsen/logrus"
 )
 
@@ -163,24 +161,55 @@ func (c *TohClient) DialUDP(ctx context.Context, addr string) (net.Conn, error) 
 	return c.DialContext(ctx, "udp", addr)
 }
 
-func (c *TohClient) DialContext(ctx context.Context, network, address string) (net.Conn, error) {
+func (c *TohClient) DialContext(ctx context.Context, network, addr string) (
+	conn net.Conn, err error) {
+	handshake := http.Header{}
+	handshake.Add(spec.HeaderHandshakeKey, c.options.Key)
+	handshake.Add(spec.HeaderHandshakeNet, network)
+	handshake.Add(spec.HeaderHandshakeAddr, addr)
+	handshake.Add(spec.HeaderHandshakeNonce, spec.NewNonce())
+	for k, v := range c.options.Headers {
+		for _, item := range v {
+			handshake.Add(k, item)
+		}
+	}
+
+	t1 := time.Now()
+	wsConn, estAddr, connEntry, err := c.dialWS(ctx, c.options.Server, handshake)
+	if err != nil {
+		return
+	}
+	logrus.Debugf("%s://%s established successfully, toh latency %s", network, addr, time.Since(t1))
+
+	if len(estAddr) == 0 {
+		estAddr = "0.0.0.0:0"
+	}
+	connEntry.RemoteHost = addr
+	connEntry.Proto = network
+	connEntry.RemoteAddr = estAddr
+	connEntry.add()
+
+	host, _port, err := net.SplitHostPort(estAddr)
+	port, _ := strconv.Atoi(_port)
 	switch network {
 	case "tcp", "tcp4", "tcp6":
-		conn, addr, err := c.dial(ctx, network, address)
-		if err != nil {
-			return nil, err
+		remoteAddr := &net.TCPAddr{
+			IP:   net.ParseIP(host),
+			Port: port,
 		}
-		return spec.NewConn(conn, addr), nil
+		conn = spec.NewConn(wsConn, remoteAddr)
 	case "udp", "udp4", "udp6":
-		conn, addr, err := c.dial(ctx, network, address)
-		if err != nil {
-			return nil, err
+		remoteAddr := &net.UDPAddr{
+			IP:   net.ParseIP(host),
+			Port: port,
 		}
-		return &spec.PacketConnWrapper{Conn: spec.NewConn(conn, addr)}, nil
+		conn = spec.PacketConnWrapper{Conn: spec.NewConn(wsConn, remoteAddr)}
 	default:
-		return nil, errors.New("unsupport network " + network)
+		err = spec.ErrUnsupportNetwork
 	}
+	return
 }
+
 func (c *TohClient) Stats() (s *api.Stats, err error) {
 	u, _ := url.ParseRequestURI(c.options.Server)
 	scheme := u.Scheme
@@ -220,69 +249,8 @@ func (c *TohClient) dnsExchange(dnServer string, query *dns.Msg) (resp *dns.Msg,
 	return
 }
 
-func (c *TohClient) dial(ctx context.Context, network, addr string) (
-	conn spec.StreamConn, remoteAddr net.Addr, err error) {
-	handshake := http.Header{}
-	handshake.Add(spec.HeaderHandshakeKey, c.options.Key)
-	handshake.Add(spec.HeaderHandshakeNet, network)
-	handshake.Add(spec.HeaderHandshakeAddr, addr)
-	handshake.Add(spec.HeaderHandshakeNonce, spec.NewNonce())
-	for k, v := range c.options.Headers {
-		for _, item := range v {
-			handshake.Add(k, item)
-		}
-	}
-
-	t1 := time.Now()
-
-	conn, respHeader, err := c.dialWS(ctx, c.options.Server, handshake)
-	if err != nil {
-		return
-	}
-	logrus.Debugf("%s://%s established successfully, toh latency %s", network, addr, time.Since(t1))
-
-	estAddr := respHeader.Get(spec.HeaderEstablishAddr)
-	if len(estAddr) == 0 {
-		estAddr = "0.0.0.0:0"
-	}
-	host, _port, err := net.SplitHostPort(estAddr)
-	port, _ := strconv.Atoi(_port)
-	switch network {
-	case "tcp", "tcp4", "tcp6":
-		remoteAddr = &net.TCPAddr{
-			IP:   net.ParseIP(host),
-			Port: port,
-		}
-	case "udp", "udp4", "udp6":
-		remoteAddr = &net.UDPAddr{
-			IP:   net.ParseIP(host),
-			Port: port,
-		}
-	default:
-		err = spec.ErrUnsupportNetwork
-	}
-	conn.(*wsConn).entry.RemoteAddr = remoteAddr.String()
-	conn.(*wsConn).entry.RemoteHost = addr
-	conn.(*wsConn).entry.Proto = network
-	go conn.(*wsConn).runPingLoop()
-	return
-}
-
 func (c *TohClient) dialWS(ctx context.Context, urlstr string, header http.Header) (
-	wsc *wsConn, respHeader http.Header, err error) {
-	respHeader = http.Header{}
-	var statusCode int
-	dialer := ws.Dialer{
-		NetDial: c.directNetDial,
-		Header:  ws.HandshakeHeaderHTTP(header),
-		OnHeader: func(key, value []byte) (err error) {
-			respHeader.Add(string(key), string(value))
-			return
-		},
-		OnStatusError: func(status int, reason []byte, resp io.Reader) {
-			statusCode = status
-		},
-	}
+	wsc *ws.GorillaWsConn, establishAddr string, connEntry *ConnEntry, err error) {
 	u, err := url.Parse(urlstr)
 	if err != nil {
 		return
@@ -293,8 +261,12 @@ func (c *TohClient) dialWS(ctx context.Context, urlstr string, header http.Heade
 	case "https":
 		u.Scheme = "wss"
 	}
-	conn, _, _, err := dialer.Dial(context.Background(), u.String())
-	if statusCode == http.StatusUnauthorized {
+	dialer := websocket.Dialer{
+		NetDialContext:   c.directNetDial,
+		HandshakeTimeout: 15 * time.Second,
+	}
+	conn, httpResp, err := dialer.Dial(u.String(), header)
+	if httpResp.StatusCode == http.StatusUnauthorized {
 		err = spec.ErrAuth
 		return
 	}
@@ -302,83 +274,23 @@ func (c *TohClient) dialWS(ctx context.Context, urlstr string, header http.Heade
 		err = fmt.Errorf("dial %s: %s", u, err)
 		return
 	}
-	wsc = &wsConn{
-		conn:            conn,
-		keepalive:       c.options.Keepalive,
-		connIdleTimeout: 75 * time.Second,
-		entry: &ConnEntry{
-			// Use the nonce returned by the server (some older versions of servers do not support nonce)
-			Nonce:      spec.MustParseNonce(respHeader.Get(spec.HeaderHandshakeNonce)),
-			LocalAddr:  conn.LocalAddr().String(),
-			lastRWTime: time.Now(),
-			ct:         c.conntrack,
-		},
+
+	establishAddr = httpResp.Header.Get(spec.HeaderEstablishAddr)
+	nonce := spec.MustParseNonce(httpResp.Header.Get(spec.HeaderHandshakeNonce))
+	connEntry = &ConnEntry{
+		// Use the nonce returned by the server (some older versions of servers do not support nonce)
+		Nonce:      nonce,
+		LocalAddr:  conn.LocalAddr().String(),
+		lastRWTime: time.Now(),
+		ct:         c.conntrack,
 	}
-	wsc.entry.add()
+
+	wsConn := ws.NewGorillaWsConn(conn, nonce)
+	wsConn.SetKeepalive(c.options.Keepalive)
+	wsConn.SetConnIdleTimeout(75 * time.Second)
+	wsConn.SetOnClose(func() { connEntry.remove() })
+	wsConn.SetOnReadWrite(func() { connEntry.lastRWTime = time.Now() })
+	go wsConn.RunPingLoop()
+	wsc = wsConn
 	return
-}
-
-type wsConn struct {
-	conn            net.Conn
-	keepalive       time.Duration
-	connIdleTimeout time.Duration
-	entry           *ConnEntry
-}
-
-func (c *wsConn) Read(ctx context.Context) (b []byte, err error) {
-	c.entry.lastRWTime = time.Now()
-	if dl, ok := ctx.Deadline(); ok {
-		c.conn.SetReadDeadline(dl)
-	}
-	b, err = wsutil.ReadServerBinary(c.conn)
-	if err != nil {
-		return
-	}
-	for i, v := range b {
-		b[i] = v ^ c.entry.Nonce
-	}
-	return
-}
-func (c *wsConn) Write(ctx context.Context, p []byte) error {
-	c.entry.lastRWTime = time.Now()
-	if dl, ok := ctx.Deadline(); ok {
-		c.conn.SetWriteDeadline(dl)
-	}
-	for i, v := range p {
-		p[i] = v ^ c.entry.Nonce
-	}
-	return wsutil.WriteClientBinary(c.conn, p)
-}
-
-func (c *wsConn) LocalAddr() net.Addr {
-	return c.conn.LocalAddr()
-}
-
-func (c *wsConn) Close(code int, reason string) error {
-	ws.WriteFrame(c.conn, ws.NewCloseFrame(ws.NewCloseFrameBody(ws.StatusCode(code), reason)))
-	c.entry.remove()
-	return c.conn.Close()
-}
-
-func (c *wsConn) Ping() error {
-	return wsutil.WriteClientMessage(c.conn, ws.OpPing, ws.NewPingFrame([]byte{}).Payload)
-}
-
-// runPingLoop keepalive the websocket connection
-func (c *wsConn) runPingLoop() {
-	if c.keepalive == 0 {
-		return
-	}
-	for {
-		time.Sleep(c.keepalive)
-		if time.Since(c.entry.lastRWTime) > c.connIdleTimeout {
-			logrus.Debug("ping: exited. connection reached the max idle time ", c.connIdleTimeout)
-			break
-		}
-		err := c.Ping()
-		if err != nil {
-			logrus.Debug("ping: ", err)
-			break
-		}
-	}
 }
