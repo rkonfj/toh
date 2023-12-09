@@ -203,7 +203,7 @@ func (c *TohClient) DialContext(ctx context.Context, network, addr string) (
 			IP:   net.ParseIP(host),
 			Port: port,
 		}
-		conn = spec.PacketConnWrapper{Conn: spec.NewConn(wsConn, remoteAddr)}
+		conn = spec.NewPacketConn(wsConn, remoteAddr)
 	default:
 		err = spec.ErrUnsupportNetwork
 	}

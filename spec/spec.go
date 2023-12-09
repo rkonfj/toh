@@ -157,6 +157,10 @@ type PacketConnWrapper struct {
 	l sync.RWMutex
 }
 
+func NewPacketConn(wsConn StreamConn, remoteAddr net.Addr) *PacketConnWrapper {
+	return &PacketConnWrapper{Conn: NewConn(wsConn, remoteAddr)}
+}
+
 func (c *PacketConnWrapper) WriteTo(b []byte, addr net.Addr) (int, error) {
 	if c.RemoteAddr().String() != addr.String() {
 		return 0, errors.New("connection-oriented UDP does not allow write to another address")

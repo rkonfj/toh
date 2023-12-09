@@ -15,6 +15,7 @@ import (
 	"github.com/rkonfj/toh/server"
 	"github.com/rkonfj/toh/server/acl"
 	"github.com/rkonfj/toh/server/api"
+	"github.com/sirupsen/logrus"
 )
 
 const serverKey = "9bJF7GcYTS9HJseBcyJoPkWbtRjxnzyxrJ48pohvftJLhoh2MPe"
@@ -41,6 +42,7 @@ func prepareServer() (cancel func(), err error) {
 	if err != nil {
 		return
 	}
+	logrus.SetLevel(logrus.DebugLevel)
 	go func() {
 		s.Run()
 	}()
