@@ -20,19 +20,19 @@ type TohClient interface {
 
 // StreamConn under layer transport connection. .i.e websocket
 type StreamConn interface {
-	Read(ctx context.Context) ([]byte, error)
-	Write(ctx context.Context, p []byte) error
+	Read() ([]byte, error)
+	Write(p []byte) error
 	LocalAddr() net.Addr
 	Close(code int, reason string) error
+	SetReadDeadline(t time.Time) error
+	SetWriteDeadline(t time.Time) error
 }
 
 // Conn tcp/udp connection based on StreamConn connection
 type Conn struct {
-	conn          StreamConn
-	addr          net.Addr
-	readDeadline  *time.Time
-	writeDeadline *time.Time
-	buf           []byte
+	conn StreamConn
+	addr net.Addr
+	buf  []byte
 }
 
 func NewConn(conn StreamConn, addr net.Addr) *Conn {
@@ -56,14 +56,7 @@ func (c *Conn) Read(b []byte) (n int, err error) {
 		return
 	}
 
-	ctx := context.Background()
-	if c.readDeadline != nil {
-		_ctx, cancel := context.WithDeadline(context.Background(), *c.readDeadline)
-		ctx = _ctx
-		defer cancel()
-	}
-
-	wsb, err := c.conn.Read(ctx)
+	wsb, err := c.conn.Read()
 	if err != nil {
 		return 0, err
 	}
@@ -79,14 +72,8 @@ func (c *Conn) Read(b []byte) (n int, err error) {
 // Write can be made to time out and return an error after a fixed
 // time limit; see SetDeadline and SetWriteDeadline.
 func (c *Conn) Write(b []byte) (n int, err error) {
-	ctx := context.Background()
-	if c.writeDeadline != nil {
-		_ctx, cancel := context.WithDeadline(context.Background(), *c.writeDeadline)
-		ctx = _ctx
-		defer cancel()
-	}
 	n = len(b)
-	err = c.conn.Write(ctx, b)
+	err = c.conn.Write(b)
 	return
 }
 
@@ -128,17 +115,17 @@ func (c *Conn) RemoteAddr() net.Addr {
 //
 // A zero value for t means I/O operations will not time out.
 func (c *Conn) SetDeadline(t time.Time) error {
-	c.readDeadline = &t
-	c.writeDeadline = &t
-	return nil
+	if err := c.conn.SetReadDeadline(t); err != nil {
+		return err
+	}
+	return c.conn.SetWriteDeadline(t)
 }
 
 // SetReadDeadline sets the deadline for future Read calls
 // and any currently-blocked Read call.
 // A zero value for t means Read will not time out.
 func (c *Conn) SetReadDeadline(t time.Time) error {
-	c.readDeadline = &t
-	return nil
+	return c.conn.SetReadDeadline(t)
 }
 
 // SetWriteDeadline sets the deadline for future Write calls
@@ -147,8 +134,7 @@ func (c *Conn) SetReadDeadline(t time.Time) error {
 // some of the data was successfully written.
 // A zero value for t means Write will not time out.
 func (c *Conn) SetWriteDeadline(t time.Time) error {
-	c.writeDeadline = &t
-	return nil
+	return c.conn.SetWriteDeadline(t)
 }
 
 // PacketConnWrapper wrap UDP conn

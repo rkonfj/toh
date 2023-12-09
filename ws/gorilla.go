@@ -1,7 +1,6 @@
 package ws
 
 import (
-	"context"
 	"io"
 	"net"
 	"time"
@@ -21,13 +20,9 @@ type GorillaWsConn struct {
 	onReadWrite     func()
 }
 
-func (c *GorillaWsConn) Read(ctx context.Context) (b []byte, err error) {
+func (c *GorillaWsConn) Read() (b []byte, err error) {
 	c.lastRWTime = time.Now()
 	c.onReadWrite()
-	if dl, ok := ctx.Deadline(); ok {
-		c.conn.SetReadDeadline(dl)
-	}
-
 	mt, b, err := c.conn.ReadMessage()
 	if err != nil {
 		if websocket.IsUnexpectedCloseError(err,
@@ -49,12 +44,9 @@ func (c *GorillaWsConn) Read(ctx context.Context) (b []byte, err error) {
 	}
 	return
 }
-func (c *GorillaWsConn) Write(ctx context.Context, p []byte) error {
+func (c *GorillaWsConn) Write(p []byte) error {
 	c.lastRWTime = time.Now()
 	c.onReadWrite()
-	if dl, ok := ctx.Deadline(); ok {
-		c.conn.SetWriteDeadline(dl)
-	}
 	for i, v := range p {
 		p[i] = v ^ c.nonce
 	}
@@ -69,6 +61,14 @@ func (c *GorillaWsConn) Close(code int, reason string) error {
 	c.conn.WriteMessage(code, []byte(reason))
 	c.onClose()
 	return c.conn.Close()
+}
+
+func (c *GorillaWsConn) SetReadDeadline(t time.Time) error {
+	return c.conn.SetReadDeadline(t)
+}
+
+func (c *GorillaWsConn) SetWriteDeadline(t time.Time) error {
+	return c.conn.SetWriteDeadline(t)
 }
 
 func (c *GorillaWsConn) SetOnClose(onClose func()) {
