@@ -176,3 +176,10 @@ func (c *PacketConnWrapper) ReadFrom(b []byte) (int, net.Addr, error) {
 	n, err := c.Conn.Read(b)
 	return n, c.RemoteAddr(), err
 }
+
+// interfaces check
+var (
+	_ net.PacketConn = (*PacketConnWrapper)(nil)
+	_ net.Conn       = (*PacketConnWrapper)(nil)
+	_ net.Conn       = (*Conn)(nil)
+)
