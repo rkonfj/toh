@@ -23,11 +23,14 @@
 
 ! OpenAI
 .openai.com
-.agpt.co
+.oaistatic.com
+.intercomcdn.com
+.intercom.io
 
 ! AI
 .huggingface.co
 .mlc.ai
+.agpt.co
 
 ! GitHub
 .github.com
@@ -113,3 +116,5 @@
 .curl.se
 .bootstrapcdn.com
 .die.net
+.featuregates.org
+.statsigapi.net
