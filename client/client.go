@@ -13,10 +13,10 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/miekg/dns"
+	"github.com/rkonfj/toh/defaults"
 	D "github.com/rkonfj/toh/dns"
 	"github.com/rkonfj/toh/server/api"
 	"github.com/rkonfj/toh/spec"
-	"github.com/rkonfj/toh/ws"
 	"github.com/sirupsen/logrus"
 )
 
@@ -250,7 +250,7 @@ func (c *TohClient) dnsExchange(dnServer string, query *dns.Msg) (resp *dns.Msg,
 }
 
 func (c *TohClient) dialWS(ctx context.Context, urlstr string, header http.Header) (
-	wsc *ws.GorillaWsConn, establishAddr string, connEntry *ConnEntry, err error) {
+	wsc *defaults.GorillaWsConn, establishAddr string, connEntry *ConnEntry, err error) {
 	u, err := url.Parse(urlstr)
 	if err != nil {
 		return
@@ -285,7 +285,7 @@ func (c *TohClient) dialWS(ctx context.Context, urlstr string, header http.Heade
 		ct:         c.conntrack,
 	}
 
-	wsConn := ws.NewGorillaWsConn(conn, nonce)
+	wsConn := defaults.NewGorillaWsConn(conn, nonce)
 	wsConn.SetKeepalive(c.options.Keepalive)
 	wsConn.SetConnIdleTimeout(75 * time.Second)
 	wsConn.SetOnClose(func() { connEntry.remove() })

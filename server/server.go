@@ -12,10 +12,10 @@ import (
 	"syscall"
 
 	"github.com/gorilla/websocket"
+	"github.com/rkonfj/toh/defaults"
 	"github.com/rkonfj/toh/server/acl"
 	"github.com/rkonfj/toh/server/admin"
 	"github.com/rkonfj/toh/spec"
-	"github.com/rkonfj/toh/ws"
 	"github.com/sirupsen/logrus"
 )
 
@@ -126,7 +126,7 @@ func (s *TohServer) handleUpgradeWebSocket(w http.ResponseWriter, r *http.Reques
 	}
 
 	go func() {
-		lbc, rbc := s.pipe(ws.NewSpecConn(conn, spec.MustParseNonce(nonce)), netConn)
+		lbc, rbc := s.pipe(defaults.NewSpecConn(conn, spec.MustParseNonce(nonce)), netConn)
 		s.trafficEventChan <- &TrafficEvent{
 			In:         lbc,
 			Out:        rbc,
