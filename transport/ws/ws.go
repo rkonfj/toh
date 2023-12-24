@@ -1,8 +1,11 @@
-package defaults
+package ws
 
 import (
+	"fmt"
 	"io"
 	"net"
+	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -18,6 +21,7 @@ type GorillaWsConn struct {
 	lastRWTime      time.Time
 	onClose         func()
 	onReadWrite     func()
+	remoteAddr      net.Addr
 }
 
 func (c *GorillaWsConn) Read() (b []byte, err error) {
@@ -25,7 +29,7 @@ func (c *GorillaWsConn) Read() (b []byte, err error) {
 	c.onReadWrite()
 	mt, b, err := c.conn.ReadMessage()
 	if err != nil {
-		if websocket.IsUnexpectedCloseError(err,
+		if websocket.IsCloseError(err,
 			websocket.CloseGoingAway, websocket.CloseNormalClosure) {
 			return nil, io.EOF
 		}
@@ -57,10 +61,18 @@ func (c *GorillaWsConn) LocalAddr() net.Addr {
 	return c.conn.LocalAddr()
 }
 
+func (c *GorillaWsConn) RemoteAddr() net.Addr {
+	return c.remoteAddr
+}
+
 func (c *GorillaWsConn) Close(code int, reason string) error {
 	c.conn.WriteMessage(code, []byte(reason))
 	c.onClose()
 	return c.conn.Close()
+}
+
+func (c *GorillaWsConn) Nonce() byte {
+	return c.nonce
 }
 
 func (c *GorillaWsConn) SetReadDeadline(t time.Time) error {
@@ -87,8 +99,8 @@ func (c *GorillaWsConn) SetConnIdleTimeout(timeout time.Duration) {
 	c.connIdleTimeout = timeout
 }
 
-// runPingLoop keepalive the websocket connection
-func (c *GorillaWsConn) RunPingLoop() {
+// Keepalive keepalive the websocket connection
+func (c *GorillaWsConn) Keepalive() {
 	if c.keepalive == 0 {
 		return
 	}
@@ -106,14 +118,61 @@ func (c *GorillaWsConn) RunPingLoop() {
 	}
 }
 
-func NewGorillaWsConn(conn *websocket.Conn, nonce byte) *GorillaWsConn {
-	return &GorillaWsConn{
+func Connect(params spec.ConnectParameters, netDial spec.Dial) (spec.StreamConn, error) {
+	dialer := websocket.Dialer{
+		NetDialContext:   netDial,
+		HandshakeTimeout: 15 * time.Second,
+	}
+	handshake := http.Header{}
+	handshake.Add(spec.HeaderHandshakeKey, params.Key)
+	handshake.Add(spec.HeaderHandshakeNet, params.Network)
+	handshake.Add(spec.HeaderHandshakeAddr, params.Addr)
+	handshake.Add(spec.HeaderHandshakeNonce, spec.NewNonce())
+	for k, v := range params.Header {
+		for _, item := range v {
+			handshake.Add(k, item)
+		}
+	}
+
+	t1 := time.Now()
+	conn, httpResp, err := dialer.Dial(params.URL.String(), handshake)
+	if err != nil {
+		return nil, fmt.Errorf("dial %s: %s", params.URL.String(), err)
+	}
+	if httpResp.StatusCode == http.StatusUnauthorized {
+		return nil, spec.ErrAuth
+	}
+	logrus.Debugf("%s://%s established successfully, toh latency %s",
+		params.Network, params.Addr, time.Since(t1))
+
+	nonce := spec.MustParseNonce(httpResp.Header.Get(spec.HeaderHandshakeNonce))
+	wsConn := GorillaWsConn{
 		conn: conn, nonce: nonce,
 		onClose:     func() {},
 		onReadWrite: func() {},
 	}
+	wsConn.SetKeepalive(params.Keepalive)
+	wsConn.SetConnIdleTimeout(75 * time.Second)
+
+	establishAddr := httpResp.Header.Get(spec.HeaderEstablishAddr)
+	if len(establishAddr) == 0 {
+		establishAddr = "0.0.0.0:0"
+	}
+	if strings.HasPrefix(params.Network, "tcp") {
+		wsConn.remoteAddr, err = net.ResolveTCPAddr(params.Network, establishAddr)
+	} else if strings.HasPrefix(params.Network, "udp") {
+		wsConn.remoteAddr, err = net.ResolveUDPAddr(params.Network, establishAddr)
+	} else {
+		err = spec.ErrUnsupportNetwork
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &wsConn, nil
 }
 
-func NewSpecConn(conn *websocket.Conn, nonce byte) *spec.Conn {
-	return spec.NewConn(NewGorillaWsConn(conn, nonce), conn.RemoteAddr())
+func NewStreamConn(conn *websocket.Conn, nonce byte) spec.StreamConn {
+	return &GorillaWsConn{
+		conn: conn, nonce: nonce,
+	}
 }

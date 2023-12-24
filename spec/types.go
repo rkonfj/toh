@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"net"
+	"net/http"
+	"net/url"
 	"os"
+	"time"
 )
 
 // LogField log filed
@@ -39,7 +42,7 @@ var (
 )
 
 // Dial describe the dial func
-type Dial func(ctx context.Context, addr string) (net.Conn, error)
+type Dial func(ctx context.Context, network, addr string) (net.Conn, error)
 
 // ConfigFileWriter a writer that writes to both files and stdout
 type ConfigFileWriter struct {
@@ -53,4 +56,13 @@ func NewConfigWriter(f *os.File) *ConfigFileWriter {
 func (w *ConfigFileWriter) Write(p []byte) (n int, err error) {
 	os.Stdout.Write(p)
 	return w.f.Write(p)
+}
+
+type ConnectParameters struct {
+	URL       *url.URL
+	Key       string
+	Network   string
+	Addr      string
+	Header    http.Header
+	Keepalive time.Duration
 }

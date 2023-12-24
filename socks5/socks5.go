@@ -203,7 +203,7 @@ func (s *Socks5Server) handshake(ctx context.Context, conn net.Conn) (
 		}
 
 		if netConn.LocalAddr() != nil {
-			addrPort := netip.MustParseAddrPort(netConn.LocalAddr().String())
+			addrPort := netip.MustParseAddrPort(netConn.RemoteAddr().String())
 			if addrPort.Addr().Is6() {
 				ip := addrPort.Addr().As16()
 				conn.Write([]byte{5, 0, 0, 4})

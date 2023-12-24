@@ -23,22 +23,33 @@ type StreamConn interface {
 	Read() ([]byte, error)
 	Write(p []byte) error
 	LocalAddr() net.Addr
+	RemoteAddr() net.Addr
 	Close(code int, reason string) error
+	Nonce() byte
 	SetReadDeadline(t time.Time) error
 	SetWriteDeadline(t time.Time) error
+}
+
+// StreamConnKeeper keep stream connection alive
+type StreamConnKeeper interface {
+	Keepalive()
+}
+
+// StreamConnListener listen conn lifecycle
+type StreamConnListener interface {
+	SetOnClose(func())
+	SetOnReadWrite(func())
 }
 
 // Conn tcp/udp connection based on StreamConn connection
 type Conn struct {
 	conn StreamConn
-	addr net.Addr
 	buf  []byte
 }
 
-func NewConn(conn StreamConn, addr net.Addr) *Conn {
+func NewConn(conn StreamConn) *Conn {
 	return &Conn{
 		conn: conn,
-		addr: addr,
 	}
 }
 
@@ -90,7 +101,7 @@ func (c *Conn) LocalAddr() net.Addr {
 
 // RemoteAddr returns the remote network address, if known.
 func (c *Conn) RemoteAddr() net.Addr {
-	return c.addr
+	return c.conn.RemoteAddr()
 }
 
 // SetDeadline sets the read and write deadlines associated
@@ -143,8 +154,8 @@ type PacketConnWrapper struct {
 	l sync.RWMutex
 }
 
-func NewPacketConn(wsConn StreamConn, remoteAddr net.Addr) *PacketConnWrapper {
-	return &PacketConnWrapper{Conn: NewConn(wsConn, remoteAddr)}
+func NewPacketConn(wsConn StreamConn) *PacketConnWrapper {
+	return &PacketConnWrapper{Conn: NewConn(wsConn)}
 }
 
 func (c *PacketConnWrapper) WriteTo(b []byte, addr net.Addr) (int, error) {
