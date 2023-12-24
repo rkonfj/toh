@@ -1,6 +1,11 @@
 package serve
 
 import (
+	"context"
+	"os"
+	"os/signal"
+	"syscall"
+
 	"github.com/dustin/go-humanize"
 	"github.com/rkonfj/toh/server"
 	"github.com/spf13/cobra"
@@ -31,6 +36,14 @@ func runAction(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+
+	sigs := make(chan os.Signal, 1)
+	defer close(sigs)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigs
+		s.Shutdown(context.Background())
+	}()
 	s.Run()
 	return nil
 }

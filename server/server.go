@@ -2,14 +2,12 @@ package server
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net"
 	"net/http"
 	"net/http/pprof"
-	"os"
-	"os/signal"
 	"sync"
-	"syscall"
 
 	"github.com/gorilla/websocket"
 	"github.com/rkonfj/toh/server/acl"
@@ -66,16 +64,16 @@ func NewTohServer(options Options) (*TohServer, error) {
 
 func (s *TohServer) Run() {
 	go s.runTrafficEventConsumeLoop()
-	go s.runShutdownListener()
 
 	logrus.Infof("server listen on %s now", s.httpServer.Addr)
 	err := s.httpServer.ListenAndServe()
-	if err != nil {
+	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		logrus.Error(err)
 	}
 }
 
 func (s *TohServer) Shutdown(ctx context.Context) error {
+	s.acl.Shutdown()
 	return s.httpServer.Shutdown(ctx)
 }
 
@@ -160,13 +158,4 @@ func (s *TohServer) pipe(wsConn *spec.Conn, netConn net.Conn) (lbc, rbc int64) {
 	rbc, _ = io.CopyBuffer(wsConn, netConn, *buf)
 	logrus.Debugf("remote conn(%s) closed, close ws conn now", netConn.RemoteAddr().String())
 	return
-}
-
-func (s *TohServer) runShutdownListener() {
-	sigs := make(chan os.Signal, 1)
-	defer close(sigs)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
-	<-sigs
-	s.acl.Shutdown()
-	os.Exit(0)
 }
