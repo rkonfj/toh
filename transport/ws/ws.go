@@ -174,5 +174,6 @@ func Connect(params spec.ConnectParameters, netDial spec.Dial) (spec.StreamConn,
 func NewStreamConn(conn *websocket.Conn, nonce byte) spec.StreamConn {
 	return &GorillaWsConn{
 		conn: conn, nonce: nonce,
+		onClose: func() {}, onReadWrite: func() {},
 	}
 }
