@@ -158,22 +158,29 @@ func Connect(params spec.ConnectParameters, netDial spec.Dial) (spec.StreamConn,
 	if len(establishAddr) == 0 {
 		establishAddr = "0.0.0.0:0"
 	}
-	if strings.HasPrefix(params.Network, "tcp") {
-		wsConn.remoteAddr, err = net.ResolveTCPAddr(params.Network, establishAddr)
-	} else if strings.HasPrefix(params.Network, "udp") {
-		wsConn.remoteAddr, err = net.ResolveUDPAddr(params.Network, establishAddr)
-	} else {
-		err = spec.ErrUnsupportNetwork
-	}
+	wsConn.remoteAddr, err = convertToAddr(params.Network, establishAddr)
 	if err != nil {
 		return nil, err
 	}
 	return &wsConn, nil
 }
 
-func NewStreamConn(conn *websocket.Conn, nonce byte) spec.StreamConn {
-	return &GorillaWsConn{
+func NewStreamConn(conn *websocket.Conn, nonce byte) (spec.StreamConn, func(network, address string)) {
+	wsConn := GorillaWsConn{
 		conn: conn, nonce: nonce,
 		onClose: func() {}, onReadWrite: func() {},
 	}
+	return &wsConn, func(network, address string) {
+		wsConn.remoteAddr, _ = convertToAddr(network, address)
+	}
+}
+
+func convertToAddr(network, addr string) (net.Addr, error) {
+	if strings.HasPrefix(network, "tcp") {
+		return net.ResolveTCPAddr(network, addr)
+	}
+	if strings.HasPrefix(network, "udp") {
+		return net.ResolveUDPAddr(network, addr)
+	}
+	return nil, spec.ErrUnsupportNetwork
 }

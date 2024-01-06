@@ -39,6 +39,12 @@ var (
 	HeaderHandshakeAddr  = "X-Toh-Addr"
 	HeaderHandshakeNonce = "X-Toh-Nonce"
 	HeaderEstablishAddr  = "X-Toh-EstAddr"
+	HeaderSessionID      = "X-Toh-SessionID"
+	HeaderSourceIP       = "X-Toh-SourceIP"
+	HeaderOP             = "X-Toh-OP"
+
+	OPOverlayControl = "overlay-control"
+	OPOverlayData    = "overlay-data"
 )
 
 // Dial describe the dial func

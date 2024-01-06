@@ -8,10 +8,12 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/rkonfj/toh/server/acl"
 	"github.com/rkonfj/toh/server/admin"
+	"github.com/rkonfj/toh/server/overlay"
 	"github.com/rkonfj/toh/spec"
 	"github.com/rkonfj/toh/transport/ws"
 	"github.com/sirupsen/logrus"
@@ -24,6 +26,7 @@ type TohServer struct {
 	bufPool          *sync.Pool
 	httpServer       *http.Server
 	upgrader         *websocket.Upgrader
+	overlayRouter    *overlay.OverlayRouter
 }
 
 type Options struct {
@@ -45,6 +48,7 @@ func NewTohServer(options Options) (*TohServer, error) {
 		upgrader:         &websocket.Upgrader{},
 		acl:              acl,
 		adminAPI:         &admin.AdminAPI{ACL: acl},
+		overlayRouter:    overlay.NewOverlayRouter(),
 		trafficEventChan: make(chan *TrafficEvent, 2048),
 		bufPool: &sync.Pool{New: func() any {
 			buf := make([]byte, max(1472, options.Buf))
@@ -54,7 +58,7 @@ func NewTohServer(options Options) (*TohServer, error) {
 
 	srv.adminAPI.Register(mux)
 	mux.HandleFunc("/stats", srv.handleShowStats)
-	mux.HandleFunc("/", srv.handleUpgradeWebSocket)
+	mux.HandleFunc("/", srv.handleMux)
 	if options.DebugMode {
 		srv.debugPprofRegister(mux)
 	}
@@ -74,6 +78,7 @@ func (s *TohServer) Run() {
 
 func (s *TohServer) Shutdown(ctx context.Context) error {
 	s.acl.Shutdown()
+	s.overlayRouter.Shutdown()
 	return s.httpServer.Shutdown(ctx)
 }
 
@@ -92,7 +97,58 @@ func (s *TohServer) debugPprofRegister(mux *http.ServeMux) {
 	logrus.Info("debug api(/debug/pprof/**) is enabled")
 }
 
-func (s *TohServer) handleUpgradeWebSocket(w http.ResponseWriter, r *http.Request) {
+func (s *TohServer) handleMux(w http.ResponseWriter, r *http.Request) {
+	op := r.Header.Get(spec.HeaderOP)
+	switch op {
+	case spec.OPOverlayControl:
+		s.handleOverlay(w, r)
+	case spec.OPOverlayData:
+		s.handleOverlayTransport(w, r)
+	default:
+		s.handleTransportWs(w, r)
+	}
+}
+
+// handleOverlay overlay network control
+func (s *TohServer) handleOverlay(w http.ResponseWriter, r *http.Request) {
+	key := r.Header.Get(spec.HeaderHandshakeKey)
+	err := s.acl.CheckKey(key)
+	if err != nil {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	wsConn, err := s.upgrader.Upgrade(w, r, http.Header{})
+	if err != nil {
+		logrus.Error(err)
+		return
+	}
+	s.overlayRouter.RegisterNode(key, wsConn)
+	wsConn.WriteJSON(overlay.ControlCommand{Action: "connected"})
+}
+
+// handleOverlayTransport overlay network data
+func (s *TohServer) handleOverlayTransport(w http.ResponseWriter, r *http.Request) {
+	key := r.Header.Get(spec.HeaderHandshakeKey)
+	session := r.Header.Get(spec.HeaderSessionID)
+	nonce := r.Header.Get(spec.HeaderHandshakeNonce)
+
+	node := s.overlayRouter.GetNode(key)
+	if node == nil {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	upgradeHeader := http.Header{}
+	upgradeHeader.Add(spec.HeaderHandshakeNonce, nonce) // nonce ack to client
+	dataConn, err := s.upgrader.Upgrade(w, r, upgradeHeader)
+	if err != nil {
+		logrus.Error(err)
+		return
+	}
+	node.Relay(session, nonce, dataConn)
+}
+
+// handleTransportWs handle client connection
+func (s *TohServer) handleTransportWs(w http.ResponseWriter, r *http.Request) {
 	key := r.Header.Get(spec.HeaderHandshakeKey)
 	network := r.Header.Get(spec.HeaderHandshakeNet)
 	addr := r.Header.Get(spec.HeaderHandshakeAddr)
@@ -105,8 +161,13 @@ func (s *TohServer) handleUpgradeWebSocket(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	dialer := net.Dialer{}
-	netConn, err := dialer.DialContext(context.Background(), network, addr)
+	var netDialer spec.NetDialer = &net.Dialer{}
+	if node, err := s.overlayRouter.RoutedNode(network, addr); err == nil {
+		netDialer = node
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	netConn, err := netDialer.DialContext(ctx, network, addr)
 	if err != nil {
 		logrus.Debugf("%s(%s) -> %s://%s: %s", clientIP, key, network, addr, err)
 		w.WriteHeader(http.StatusBadRequest)
@@ -124,8 +185,8 @@ func (s *TohServer) handleUpgradeWebSocket(w http.ResponseWriter, r *http.Reques
 	}
 
 	go func() {
-		lbc, rbc := s.pipe(
-			spec.NewConn(ws.NewStreamConn(conn, spec.MustParseNonce(nonce))), netConn)
+		streamConn, _ := ws.NewStreamConn(conn, spec.MustParseNonce(nonce))
+		lbc, rbc := s.pipe(spec.NewConn(streamConn), netConn)
 		s.trafficEventChan <- &TrafficEvent{
 			In:         lbc,
 			Out:        rbc,

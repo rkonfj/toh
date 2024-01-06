@@ -8,14 +8,19 @@ import (
 	"time"
 )
 
+// NetDialer dialer interface
+type NetDialer interface {
+	DialContext(ctx context.Context, network, address string) (net.Conn, error)
+}
+
 // TohClient the ToH client
 type TohClient interface {
 	DialTCP(ctx context.Context, address string) (net.Conn, error)
 	DialUDP(ctx context.Context, address string) (net.Conn, error)
-	DialContext(ctx context.Context, network, address string) (net.Conn, error)
 	LookupIP(host string) (ips []net.IP, err error)
 	LookupIP4(host string) (ips []net.IP, err error)
 	LookupIP6(host string) (ips []net.IP, err error)
+	NetDialer
 }
 
 // StreamConn under layer transport connection. .i.e websocket
@@ -32,6 +37,7 @@ type StreamConn interface {
 
 // StreamConnKeeper keep stream connection alive
 type StreamConnKeeper interface {
+	SetKeepalive(keepalive time.Duration)
 	Keepalive()
 }
 
