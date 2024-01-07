@@ -21,9 +21,10 @@ type Key struct {
 }
 
 type Stats struct {
-	BytesLimit    string      `json:"bytesLimit,omitempty"`
-	InBytesLimit  string      `json:"inBytesLimit,omitempty"`
-	OutBytesLimit string      `json:"outBytesLimit,omitempty"`
-	BytesUsage    *BytesUsage `json:"bytesUsage,omitempty"`
-	Status        string      `json:"status"`
+	BytesLimit    string              `json:"bytesLimit,omitempty"`
+	InBytesLimit  string              `json:"inBytesLimit,omitempty"`
+	OutBytesLimit string              `json:"outBytesLimit,omitempty"`
+	BytesUsage    *BytesUsage         `json:"bytesUsage,omitempty"`
+	Status        string              `json:"status"`
+	Overlay       map[string][]string `json:"overlay"`
 }

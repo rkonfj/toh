@@ -47,6 +47,7 @@ func (s *TohServer) handleShowStats(w http.ResponseWriter, r *http.Request) {
 	usage := s.acl.GetUsage(apiKey)
 	stats := api.Stats{
 		BytesUsage: usage,
+		Overlay:    s.overlayRouter.Nodes(),
 	}
 	if len(limit.Bytes) > 0 {
 		stats.BytesLimit = limit.Bytes

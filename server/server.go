@@ -122,7 +122,7 @@ func (s *TohServer) handleOverlay(w http.ResponseWriter, r *http.Request) {
 		logrus.Error(err)
 		return
 	}
-	s.overlayRouter.RegisterNode(key, wsConn)
+	s.overlayRouter.RegisterNode(key, spec.RealIP(r), wsConn)
 	wsConn.WriteJSON(overlay.ControlCommand{Action: "connected"})
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"strings"
 	"sync"
@@ -36,6 +37,7 @@ type Session struct {
 
 type Node struct {
 	key      string
+	publicIP string
 	router   *OverlayRouter
 	control  *websocket.Conn
 	mut      sync.Mutex
@@ -124,6 +126,13 @@ func (n *Node) Session(sessionID string) *Session {
 	return n.sessions[sessionID]
 }
 
+func (n *Node) ID() string {
+	if len(n.publicIP) > 0 {
+		return n.publicIP
+	}
+	return n.control.RemoteAddr().String()
+}
+
 func (n *Node) runControlLoop() {
 	for {
 		mt, b, err := n.control.ReadMessage()
@@ -175,18 +184,24 @@ func NewOverlayRouter() *OverlayRouter {
 	}
 }
 
-func (r *OverlayRouter) RegisterNode(key string, wsConn *websocket.Conn) {
+func (r *OverlayRouter) RegisterNode(key, nodeIP string, wsConn *websocket.Conn) {
 	r.mut.Lock()
 	defer r.mut.Unlock()
-	logrus.WithField("node", key).Info("overlay node connected")
-	r.connectedNodes[key] = &Node{key: key, router: r, control: wsConn, sessions: make(map[string]*Session)}
+	logrus.WithField("node", key).Debug("overlay node connected")
+	r.connectedNodes[key] = &Node{
+		key:      key,
+		publicIP: nodeIP,
+		router:   r,
+		control:  wsConn,
+		sessions: make(map[string]*Session),
+	}
 	go r.connectedNodes[key].runControlLoop()
 }
 
 func (r *OverlayRouter) UnregisterNode(key string) {
 	r.mut.Lock()
 	defer r.mut.Unlock()
-	logrus.WithField("node", key).Info("overlay node exited")
+	logrus.WithField("node", key).Debug("overlay node exited")
 	delete(r.connectedNodes, key)
 	for _, m := range r.router {
 		for k, n := range m {
@@ -201,6 +216,17 @@ func (r *OverlayRouter) GetNode(key string) *Node {
 	r.mut.RLock()
 	defer r.mut.RUnlock()
 	return r.connectedNodes[key]
+}
+
+// Nodes nodeIP -> routes
+func (r *OverlayRouter) Nodes() map[string][]string {
+	nodes := make(map[string][]string)
+	for net, route := range r.router {
+		for addr, node := range route {
+			nodes[node.ID()] = append(nodes[node.ID()], fmt.Sprintf("%s/%s", addr, net))
+		}
+	}
+	return nodes
 }
 
 func (r *OverlayRouter) RoutedNode(network, address string) (*Node, error) {
