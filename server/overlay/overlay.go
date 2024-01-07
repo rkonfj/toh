@@ -8,7 +8,6 @@ import (
 	"net"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/rkonfj/toh/server/id"
@@ -36,6 +35,7 @@ type Session struct {
 }
 
 type Node struct {
+	id       string
 	key      string
 	publicIP string
 	router   *OverlayRouter
@@ -115,7 +115,6 @@ func (n *Node) Relay(sessionID, nonce string, data *websocket.Conn) {
 }
 
 func (n *Node) Close() error {
-	n.control.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""), time.Now().Add(time.Second))
 	n.control.Close()
 	return nil
 }
@@ -128,7 +127,7 @@ func (n *Node) Session(sessionID string) *Session {
 
 func (n *Node) ID() string {
 	if len(n.publicIP) > 0 {
-		return n.publicIP
+		return fmt.Sprintf("%s_%s", n.publicIP, n.id)
 	}
 	return n.control.RemoteAddr().String()
 }
@@ -184,11 +183,15 @@ func NewOverlayRouter() *OverlayRouter {
 	}
 }
 
-func (r *OverlayRouter) RegisterNode(key, nodeIP string, wsConn *websocket.Conn) {
+func (r *OverlayRouter) RegisterNode(key, nodeIP string, wsConn *websocket.Conn) error {
 	r.mut.Lock()
 	defer r.mut.Unlock()
+	if _, ok := r.connectedNodes[key]; ok {
+		return errors.New("node already joined the overlay network")
+	}
 	logrus.WithField("node", key).Debug("overlay node connected")
 	r.connectedNodes[key] = &Node{
+		id:       id.Generate(0),
 		key:      key,
 		publicIP: nodeIP,
 		router:   r,
@@ -196,6 +199,7 @@ func (r *OverlayRouter) RegisterNode(key, nodeIP string, wsConn *websocket.Conn)
 		sessions: make(map[string]*Session),
 	}
 	go r.connectedNodes[key].runControlLoop()
+	return nil
 }
 
 func (r *OverlayRouter) UnregisterNode(key string) {

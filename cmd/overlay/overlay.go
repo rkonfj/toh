@@ -58,6 +58,10 @@ func (c *Control) Run() error {
 		switch cmd.Action {
 		case "error":
 			logrus.Error(cmd.Data)
+		case "exit":
+			logrus.Error(cmd.Data)
+			c.Close()
+			return nil
 		case "connected":
 			c.latency = time.Since(c.latencyT1)
 			logrus.WithField("latency", c.latency).Info("started as an overlay node now")
@@ -69,6 +73,9 @@ func (c *Control) Run() error {
 }
 
 func (c *Control) Close() error {
+	c.controlConn.WriteControl(websocket.CloseMessage,
+		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""),
+		time.Now().Add(time.Second))
 	return c.controlConn.Close()
 }
 
