@@ -22,10 +22,12 @@
 .ggpht.com
 
 ! OpenAI
+.chatgpt.com
 .openai.com
 .oaistatic.com
 .intercomcdn.com
 .intercom.io
+.auth0.com
 
 ! AI
 .huggingface.co
