@@ -1,5 +1,5 @@
-! This rule set lists some websites that are commonly used by students in their daily study
-! Under 18 years old, need to be accompanied by parents
+! This ruleset covers websites frequently used by students for academic purposes.
+! Users under the age of 18 are advised to access these sites with parental guidance.
 
 ! Organizations in cooperation with ISO
 .ietf.org
