@@ -6,6 +6,8 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -15,17 +17,18 @@ import (
 
 type GorillaWsConn struct {
 	conn            *websocket.Conn
+	writeMu         sync.Mutex
 	nonce           byte
 	keepalive       time.Duration
 	connIdleTimeout time.Duration
-	lastRWTime      time.Time
+	lastRWTime      atomic.Int64
 	onClose         func()
 	onReadWrite     func()
 	remoteAddr      net.Addr
 }
 
 func (c *GorillaWsConn) Read() (b []byte, err error) {
-	c.lastRWTime = time.Now()
+	c.touch()
 	c.onReadWrite()
 	mt, b, err := c.conn.ReadMessage()
 	if err != nil {
@@ -37,7 +40,7 @@ func (c *GorillaWsConn) Read() (b []byte, err error) {
 	}
 	switch mt {
 	case websocket.PingMessage:
-		c.conn.WriteMessage(websocket.PongMessage, nil)
+		_ = c.writeMessage(websocket.PongMessage, nil)
 		return make([]byte, 0), nil
 	case websocket.BinaryMessage:
 	default:
@@ -49,12 +52,23 @@ func (c *GorillaWsConn) Read() (b []byte, err error) {
 	return
 }
 func (c *GorillaWsConn) Write(p []byte) error {
-	c.lastRWTime = time.Now()
+	c.touch()
 	c.onReadWrite()
+	b := make([]byte, len(p))
 	for i, v := range p {
-		p[i] = v ^ c.nonce
+		b[i] = v ^ c.nonce
 	}
-	return c.conn.WriteMessage(websocket.BinaryMessage, p)
+	return c.writeMessage(websocket.BinaryMessage, b)
+}
+
+func (c *GorillaWsConn) writeMessage(messageType int, data []byte) error {
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	return c.conn.WriteMessage(messageType, data)
+}
+
+func (c *GorillaWsConn) touch() {
+	c.lastRWTime.Store(time.Now().UnixNano())
 }
 
 func (c *GorillaWsConn) LocalAddr() net.Addr {
@@ -66,9 +80,12 @@ func (c *GorillaWsConn) RemoteAddr() net.Addr {
 }
 
 func (c *GorillaWsConn) Close(code int, reason string) error {
-	c.conn.WriteMessage(code, []byte(reason))
+	c.writeMu.Lock()
+	_ = c.conn.WriteMessage(code, []byte(reason))
+	err := c.conn.Close()
+	c.writeMu.Unlock()
 	c.onClose()
-	return c.conn.Close()
+	return err
 }
 
 func (c *GorillaWsConn) Nonce() byte {
@@ -80,6 +97,8 @@ func (c *GorillaWsConn) SetReadDeadline(t time.Time) error {
 }
 
 func (c *GorillaWsConn) SetWriteDeadline(t time.Time) error {
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
 	return c.conn.SetWriteDeadline(t)
 }
 
@@ -106,11 +125,12 @@ func (c *GorillaWsConn) Keepalive() {
 	}
 	for {
 		time.Sleep(c.keepalive)
-		if time.Since(c.lastRWTime) > c.connIdleTimeout {
+		lastRWTime := time.Unix(0, c.lastRWTime.Load())
+		if time.Since(lastRWTime) > c.connIdleTimeout {
 			logrus.Debug("ping exited. connection reached the max idle time", c.connIdleTimeout)
 			break
 		}
-		err := c.conn.WriteMessage(websocket.PingMessage, nil)
+		err := c.writeMessage(websocket.PingMessage, nil)
 		if err != nil {
 			logrus.Debug("ping exited.", err)
 			break
@@ -153,6 +173,7 @@ func Connect(params spec.ConnectParameters, netDial spec.Dial) (spec.StreamConn,
 	}
 	wsConn.SetKeepalive(params.Keepalive)
 	wsConn.SetConnIdleTimeout(75 * time.Second)
+	wsConn.touch()
 
 	establishAddr := httpResp.Header.Get(spec.HeaderEstablishAddr)
 	if len(establishAddr) == 0 {
@@ -170,6 +191,7 @@ func NewStreamConn(conn *websocket.Conn, nonce byte) (spec.StreamConn, func(netw
 		conn: conn, nonce: nonce,
 		onClose: func() {}, onReadWrite: func() {},
 	}
+	wsConn.touch()
 	return &wsConn, func(network, address string) {
 		wsConn.remoteAddr, _ = convertToAddr(network, address)
 	}

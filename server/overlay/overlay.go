@@ -41,6 +41,7 @@ type Node struct {
 	router   *OverlayRouter
 	control  *websocket.Conn
 	mut      sync.Mutex
+	writeMu  sync.Mutex
 	sessions map[string]*Session
 }
 
@@ -67,7 +68,7 @@ func (n *Node) DialContext(ctx context.Context, net, address string) (conn net.C
 	n.mut.Lock()
 	sessionID := id.Generate(0)
 	n.mut.Unlock()
-	err = n.control.WriteJSON(ControlCommand{Action: "dial", Data: NetAddr{Net: net, Address: address, Session: sessionID}})
+	err = n.writeJSON(ControlCommand{Action: "dial", Data: NetAddr{Net: net, Address: address, Session: sessionID}})
 	if err != nil {
 		return
 	}
@@ -99,6 +100,18 @@ func (n *Node) DialContext(ctx context.Context, net, address string) (conn net.C
 	}
 }
 
+func (n *Node) writeJSON(v any) error {
+	n.writeMu.Lock()
+	defer n.writeMu.Unlock()
+	return n.control.WriteJSON(v)
+}
+
+func (n *Node) writeMessage(messageType int, data []byte) error {
+	n.writeMu.Lock()
+	defer n.writeMu.Unlock()
+	return n.control.WriteMessage(messageType, data)
+}
+
 func (n *Node) Relay(sessionID, nonce string, data *websocket.Conn) {
 	n.mut.Lock()
 	defer n.mut.Unlock()
@@ -115,8 +128,9 @@ func (n *Node) Relay(sessionID, nonce string, data *websocket.Conn) {
 }
 
 func (n *Node) Close() error {
-	n.control.Close()
-	return nil
+	n.writeMu.Lock()
+	defer n.writeMu.Unlock()
+	return n.control.Close()
 }
 
 func (n *Node) Session(sessionID string) *Session {
@@ -137,18 +151,18 @@ func (n *Node) runControlLoop() {
 		mt, b, err := n.control.ReadMessage()
 		if err != nil {
 			n.router.UnregisterNode(n.key)
-			n.control.Close()
+			_ = n.Close()
 			return
 		}
 		switch mt {
 		case websocket.PingMessage:
-			n.control.WriteMessage(websocket.PongMessage, nil)
+			_ = n.writeMessage(websocket.PongMessage, nil)
 		default:
 			var cmd ControlCommand
 			err = json.Unmarshal(b, &cmd)
 			if err != nil {
 				n.router.UnregisterNode(n.key)
-				n.control.Close()
+				_ = n.Close()
 				return
 			}
 			logrus.WithField("node", n.key).Debugf("received command: %+v", cmd)
@@ -157,7 +171,7 @@ func (n *Node) runControlLoop() {
 				route := cmd.Data.(map[string]interface{})
 				err = n.AddRoute(route["net"].(string), route["address"].(string))
 				if err != nil {
-					n.control.WriteJSON(ControlCommand{
+					_ = n.writeJSON(ControlCommand{
 						Action: "error",
 						Data:   err.Error(),
 					})
@@ -190,7 +204,7 @@ func (r *OverlayRouter) RegisterNode(key, nodeIP string, wsConn *websocket.Conn)
 		return errors.New("node already joined the overlay network")
 	}
 	logrus.WithField("node", key).Debug("overlay node connected")
-	r.connectedNodes[key] = &Node{
+	node := &Node{
 		id:       id.Generate(0),
 		key:      key,
 		publicIP: nodeIP,
@@ -198,7 +212,11 @@ func (r *OverlayRouter) RegisterNode(key, nodeIP string, wsConn *websocket.Conn)
 		control:  wsConn,
 		sessions: make(map[string]*Session),
 	}
-	go r.connectedNodes[key].runControlLoop()
+	if err := node.writeJSON(ControlCommand{Action: "connected"}); err != nil {
+		return err
+	}
+	r.connectedNodes[key] = node
+	go node.runControlLoop()
 	return nil
 }
 

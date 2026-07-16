@@ -127,7 +127,6 @@ func (s *TohServer) handleOverlay(w http.ResponseWriter, r *http.Request) {
 		wsConn.WriteJSON(overlay.ControlCommand{Action: "exit", Data: err.Error()})
 		return
 	}
-	wsConn.WriteJSON(overlay.ControlCommand{Action: "connected"})
 }
 
 // handleOverlayTransport overlay network data

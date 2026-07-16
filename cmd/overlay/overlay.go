@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -29,12 +30,13 @@ type Control struct {
 	key               string
 	keepaliveDuration time.Duration
 	controlConn       *websocket.Conn
-	latencyT1         time.Time
+	writeMu           sync.Mutex
+	latencyT1         atomic.Int64
 	latency           time.Duration
 }
 
 func (c *Control) Route(net, address string) {
-	if err := c.controlConn.WriteJSON(overlay.ControlCommand{
+	if err := c.writeJSON(overlay.ControlCommand{
 		Action: "route",
 		Data:   overlay.NetAddr{Net: net, Address: address},
 	}); err != nil {
@@ -42,6 +44,18 @@ func (c *Control) Route(net, address string) {
 		return
 	}
 	logrus.Infof("route %s/%s", address, net)
+}
+
+func (c *Control) writeJSON(v any) error {
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	return c.controlConn.WriteJSON(v)
+}
+
+func (c *Control) writeMessage(messageType int, data []byte) error {
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	return c.controlConn.WriteMessage(messageType, data)
 }
 
 func (c *Control) Run() error {
@@ -63,7 +77,7 @@ func (c *Control) Run() error {
 			c.Close()
 			return nil
 		case "connected":
-			c.latency = time.Since(c.latencyT1)
+			c.latency = time.Since(time.Unix(0, c.latencyT1.Load()))
 			logrus.WithField("latency", c.latency).Info("started as an overlay node now")
 		case "dial":
 			c.dial(cmd.Data.(map[string]any)["net"].(string),
@@ -73,7 +87,9 @@ func (c *Control) Run() error {
 }
 
 func (c *Control) Close() error {
-	c.controlConn.WriteControl(websocket.CloseMessage,
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	_ = c.controlConn.WriteControl(websocket.CloseMessage,
 		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""),
 		time.Now().Add(time.Second))
 	return c.controlConn.Close()
@@ -90,8 +106,8 @@ func (c *Control) keepalive() {
 	}
 	for {
 		time.Sleep(max(c.keepaliveDuration, time.Second))
-		c.latencyT1 = time.Now()
-		err := c.controlConn.WriteMessage(websocket.PingMessage, nil)
+		c.latencyT1.Store(time.Now().UnixNano())
+		err := c.writeMessage(websocket.PingMessage, nil)
 		if err != nil {
 			return
 		}
@@ -127,12 +143,12 @@ func (c *Control) dial(network, address, session string) {
 	dialer := net.Dialer{}
 	conn, err := dialer.DialContext(context.Background(), network, address)
 	if err != nil {
-		c.controlConn.WriteJSON(overlay.ControlCommand{Action: "error", Data: err.Error()})
+		_ = c.writeJSON(overlay.ControlCommand{Action: "error", Data: err.Error()})
 		return
 	}
 	transport, err := c.connect(session)
 	if err != nil {
-		c.controlConn.WriteJSON(overlay.ControlCommand{Action: "error", Data: err.Error()})
+		_ = c.writeJSON(overlay.ControlCommand{Action: "error", Data: err.Error()})
 		return
 	}
 	streamConn, _ := ws.NewStreamConn(transport.Conn, transport.nonce)
@@ -188,5 +204,7 @@ func (n *OverlayNetwork) Connect(server, key string, keepalive time.Duration) (*
 	if httpResp.StatusCode != http.StatusSwitchingProtocols {
 		return nil, errors.New("handshake failed")
 	}
-	return &Control{controlConn: wsConn, server: server, key: key, keepaliveDuration: keepalive, latencyT1: t1}, nil
+	control := &Control{controlConn: wsConn, server: server, key: key, keepaliveDuration: keepalive}
+	control.latencyT1.Store(t1.UnixNano())
+	return control, nil
 }
