@@ -9,6 +9,7 @@
 .google.com
 .google.com.sg
 .google.com.hk
+.google.dev
 .gmail.com
 .googleapis.com
 .googleusercontent.com
